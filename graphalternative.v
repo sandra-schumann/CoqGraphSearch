@@ -88,12 +88,13 @@ Fixpoint BFS' (g : graph) (target : node) (q : queue path) (visited : list node)
     | None => None
     | Some p => if node_eq_dec (endnode p) target then Some p
                 else BFS' g target
-                  (q ++ fold_right [] (filter (fun (x:edge) =>
+                  (q ++ fold_right (filter (fun (x:edge) =>
                    match x with Edge n1 n2 =>
                    if (node_eq_dec n1 (endnode p)) then
                      if negb (in_list n2 (n1::visited)) then true else false
                    else false
                    end) g))
+                   []
                   ((endnode p)::visited)
   end.
 
