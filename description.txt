@@ -1,0 +1,35 @@
+Coq Graph Search: Project Description
+=====================================
+
+Team
+----
+
+Our team consists of Andres Erbsen and Sandra Schumann.
+
+Modelling Goal
+--------------
+
+The modelling part for this project will consist of finding some way to
+represent graphs (possibly trying out several and sorting out which one works
+best for our goals). Th graphs being represented may be undirected or directed,
+or possibly undirected graphs may be represented as a special case of directed
+graphs.
+
+The subsequent goal would be to implement one or several graph search
+algorithms using the graph representation chosen.
+
+* The minimum goal is to implement BFS.
+* A good result would be to implement BFS and Dijkstra's algorithm.
+* Extra credit, in case there is extra time: implement A*.
+
+Goal for Proofs
+---------------
+
+This project aims to prove the "correctness" of (one or several) common graph
+search algorithm(s). The definition of "correctness" must be carefully chosen
+and for that reason this will not be written down here but instead chosen in
+the process of working with the proofs. The general idea is that the
+"correctness" definition chosen should ideally match closely what a human
+being perceives as "correct" when talking about the algorithm(s) mentioned
+above ("finds shortest path from node A to node B" or similar, only more
+detailed).

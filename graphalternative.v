@@ -19,7 +19,7 @@ Qed.
 Definition graph := list edge.
 
 Definition undirected (g : graph) : Prop :=
-  forall e, In e g -> match e with (Edge n1 n2) => In (Edge n2 n1) g end.
+  forall (e:edge), In e g -> match e with (Edge n1 n2) => In (Edge n2 n1) g end.
 
 Fixpoint nodes_in_graph (g : graph) : list node :=
   match g with
@@ -88,7 +88,7 @@ Fixpoint BFS' (g : graph) (target : node) (q : queue path) (visited : list node)
     | None => None
     | Some p => if node_eq_dec (endnode p) target then Some p
                 else BFS' g target
-                  (q ++ (filter (fun (x:edge) =>
+                  (q ++ fold_right [] (filter (fun (x:edge) =>
                    match x with Edge n1 n2 =>
                    if (node_eq_dec n1 (endnode p)) then
                      if negb (in_list n2 (n1::visited)) then true else false
