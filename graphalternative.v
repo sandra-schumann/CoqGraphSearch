@@ -12,6 +12,12 @@ Import ListNotations.
 Inductive node : Type := Node : nat -> node.
 Inductive edge : Type := Edge : node -> node -> edge.
 
+Definition fst (e : edge) : node :=
+  match e with (Edge n _) => n end.
+
+Definition snd (e : edge) : node :=
+  match e with (Edge _ n) => n end.
+
 Definition node_eq_dec : forall (x y:node), {x = y} + {x <> y}.
   decide equality. apply eq_nat_dec.
 Qed.
@@ -28,21 +34,21 @@ Fixpoint nodes_in_graph (g : graph) : list node :=
   end.
 
 Inductive path : Type :=
-  | Starts : node -> node -> path
+  | Starts : node -> path
   | Cons : path -> node -> path.
 
 Fixpoint path_in_graph (p : path) (g : graph) : Prop :=
   match p with
-    | Starts n1 n2 => In (Edge n1 n2) g
+    | Starts n => In n (nodes_in_graph g)
     | Cons p' n => match p' with
-                     | Starts _ n' => In (Edge n' n) g /\ path_in_graph p' g
+                     | Starts n' => In (Edge n' n) g
                      | Cons _ n'   => In (Edge n' n) g /\ path_in_graph p' g
                    end
   end.
 
 Fixpoint length (p : path) : nat :=
   match p with
-    | Starts _ _ => 1
+    | Starts _ => 0
     | Cons p' _ => 1 + length p'
   end.
 
@@ -50,13 +56,13 @@ Definition cost (p : path) : nat := length p.
 
 Fixpoint startnode (p : path) : node :=
   match p with
-    | Starts n _ => n
+    | Starts n => n
     | Cons p' _ => startnode p'
   end.
 
 Fixpoint endnode (p : path) : node :=
   match p with
-    | Starts _ n => n
+    | Starts n => n
     | Cons _ n => n
   end.
 
@@ -77,33 +83,38 @@ Definition pop {A:Type} (q : queue A) : option (queue A) :=
     | _::t => Some t
   end.
 
-Fixpoint in_list (i : node) (n : list node) : bool :=
-  match n with
+Fixpoint in_list (i : node) (ns : list node) : bool :=
+  match ns with
     | [] => false
     | h::t => if node_eq_dec h i then true else in_list i t
   end.
 
-Fixpoint BFS' (g : graph) (target : node) (q : queue path) (visited : list node) : option path :=
-  match (top q) with
-    | None => None
-    | Some p => if node_eq_dec (endnode p) target then Some p
-                else BFS' g target
-                  (q ++ fold_right (filter (fun (x:edge) =>
-                   match x with Edge n1 n2 =>
-                   if (node_eq_dec n1 (endnode p)) then
-                     if negb (in_list n2 (n1::visited)) then true else false
-                   else false
-                   end) g))
-                   []
-                  ((endnode p)::visited)
+Definition BFS_step (g : graph) (ps : list path) : list path :=
+  let is_next_step (p : path) (e : edge) :=
+    if node_eq_dec (endnode p) (fst e) then true else false
+  in
+
+  let extend_path (p : path) (e : edge) :=
+    Cons p (snd e)
+  in
+  
+  let extend_path_to_paths (g : graph) (p : path) :=
+    map (extend_path p) (filter (is_next_step p) g)
+  in
+  
+  flat_map (extend_path_to_paths g) ps.
+
+Fixpoint BFS_n_steps (g : graph) (n : node) (i : nat) : list path :=
+  let is_beginning_in_graph :=
+    fold_right (fun x => orb (if node_eq_dec x n then true else false))
+      false (nodes_in_graph g)
+  in
+  
+  match i with
+    | 0 => match is_beginning_in_graph with
+             | true => [Starts n]
+             | _ => []
+           end
+    | S i' => BFS_step g (BFS_n_steps g n i')
   end.
-
-
-
-
-
-
-
-
-
 
