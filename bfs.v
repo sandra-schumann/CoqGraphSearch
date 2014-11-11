@@ -209,30 +209,51 @@ Definition paths_from_parents (p:parent_t) : list path :=
    Tõestada: kui paths_from_parents väljastab pathi, siis In frontier (startNode p) *)
 
 (* Pseudocode:
-bfs is correct if
-  for all graphs g, initial frontiers, two nodes n1 and n2 in g
-    if n1 is in the initial frontier and n2 is reachable from n1
-    then exists a path p such that bfs finds this path
-      and the startnode is n1 and endnode n2
-      and for all other paths p' in this graph with same start and end
-        the length (cost) of p' is greater or equal to the length of p
-(also note that the path found by bfs is in g by above)
+bfs is corrent if
+  for all graphs g, initial frontiers, nodes n1 and n2 in g
+    if bfs finds a path, this path is in g
+      and the beginning node of this path is in the frontier
+    and
+    if n2 is reachable from n1 and n1 is in the frontier
+      then there exists a path p that bfs finds
+      that starts from n1 and ends in n2
+      and
+      for all paths p' that have same start and end
+        (if p' is in g, then its length is greater or equal to the length of p)
+        and
+        (if p is not equal to p', then bfs does not find p')
+      (a long way of saying "if n2 is reachable from n1 that is in frontier
+       then bfs finds exactly one path from n1 to n2 and that is the shortest")
+    and
+    if n2 is not reachable from n1
+      then for all paths p' that bfs finds
+      if p' starts from n1, it cannot end in n2
+      (a long way of saying "if n2 is not reachable from n1
+       then bfs does not find a path from n1 to n2")
 *)
 
-(*Definition path_eq_dec : forall (p q:path), {p = q} + {p <> q}.
-  decide equality. apply eq_nat_dec.
+Definition path_eq_dec : forall (p q:path), {p = q} + {p <> q}.
+  decide equality; apply node_eq_dec.
 Qed.
-Definition node_in_dec := in_dec node_eq_dec.*)
 
-Definition bfs_finds_shortest : Prop :=
+Definition bfs_correct : Prop :=
   forall (g : graph) (frontier : list node) (n1 : node) (n2 : node),
-    In n1 frontier -> reachable n1 n2 g ->
-    exists (p : path), In p (paths_from_parents (bfs g frontier)) /\
-      n1 = startNode p /\ n2 = endNode p /\
-      (forall (p' : path), n1 = startNode p' ->
-         n2 = endNode p' -> hasPath g p' ->
-         length p' >= length p).
+    (forall (p : path), In p (paths_from_parents (bfs g frontier)) ->
+       hasPath g p /\ In (startNode p) frontier)
+    /\
+    (reachable n1 n2 g -> In n1 frontier ->
+      exists (p : path), In p (paths_from_parents (bfs g frontier)) /\
+        n1 = startNode p /\ n2 = endNode p /\
+        (forall (p' : path), n1 = startNode p' ->
+           n2 = endNode p' ->
+           (hasPath g p' -> length p' >= length p)
+           /\ (p <> p' -> ~(In p (paths_from_parents (bfs g frontier))))))
+    /\
+    (~(reachable n1 n2 g) ->
+      forall (p' : path),
+        In p' (paths_from_parents (bfs g frontier)) ->
+        n1 = startNode p' -> n2 <> endNode p').
 
 (* Tõestada: kõik, mis BFS leiab, on lühimad *)
 (* BFS: ei eksisteeri ühtegi teist teed *)
-(* BFS: kui ei ole reachable, siis ei eksisteeri teed *)
+(* BFS: kui ei ole reachable, siis bfs ei leia teed *)
