@@ -69,32 +69,32 @@ Lemma remove_length : forall g v neighbors frontier g' frontier',
     rewrite H0 in H1. rewrite H1. auto.
 Qed.
 
-Function bfs'''' (args : graph * list node * parent_t)
+Function bfs_function' (args : graph * list node * parent_t)
     {measure (fun args => length (fst (fst (args))))} : parent_t := 
   let (args', parent) := args in let (g, frontier) := args' in
-  match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier
-      with None => parent | Some (v, neighbors, g', frontier') =>
-  let parent' := map (fun u => (u,v)) neighbors ++ parent in
-  bfs'''' (g', frontier', parent')
+  match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
+  | None => parent
+  | Some (v, neighbors, g', frontier') => bfs_function' (g', frontier',
+               fold_right (fun u pr => (u,v)::pr) parent neighbors)
 end.
   intros; subst; simpl.
   rewrite (remove_length _ _ _ _ _ _ teq1); auto.
 Qed.
-Definition bfs' g frontier := bfs'''' (g, frontier, nil).
+Definition bfs_function g frontier := bfs_function' (g, frontier, nil).
 
-Fixpoint bfs'' (len_g:nat) (g:graph) (frontier : list node) (parent:parent_t)
+Fixpoint bfs' (len_g:nat) (g:graph) (frontier : list node) (parent:parent_t)
     {struct len_g} : option parent_t := 
-  match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier
-    with None => Some parent | Some (((v, neighbors), g'), frontier') =>
-  let parent' := map (fun u => (u,v)) neighbors ++ parent in
-  match len_g with 0 => None | S len_g' => bfs'' len_g' g' frontier' parent'
+  match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
+  | None => Some parent
+  | Some (((v, neighbors), g'), frontier') =>
+      match len_g with
+      | 0 => None
+      | S len_g' => bfs' len_g' g' frontier'
+               (fold_right (fun u pr => (u,v)::pr) parent neighbors)
 end end.
-Definition bfs''' g frontier := bfs'' (length g) g frontier nil.
 
 Ltac neqConstructor := simpl; unfold not; intro H_; inversion H_.
-
-Lemma bfs_terminates : forall g frontier, bfs''' g frontier <> None.
-  unfold bfs'''.
+Lemma bfs_terminates : forall g frontier, bfs' (length g) g frontier nil <> None.
   intros g frontier.
   remember ([]) as parent; clear Heqparent.
   remember (length g) as l.
@@ -102,24 +102,53 @@ Lemma bfs_terminates : forall g frontier, bfs''' g frontier <> None.
   generalize dependent parent.
   generalize dependent frontier.
   generalize dependent g.
-  induction l; intros; subst.
-    Focus 1. destruct g; [|inversion Heql]. simpl. induction frontier; neqConstructor. auto.
-  simpl.
-  case_eq (firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier); intros; [|neqConstructor].
-  destruct p; destruct p; destruct a.
-  eapply IHl.
-  specialize (remove_length _ _ _ _ _ _ H); intro H'.
-  rewrite <- Heql in H'.
-  auto.
+  induction l; intros; subst. {
+    Focus 1. destruct g; [|inversion Heql]. simpl.
+    induction frontier; neqConstructor. auto.
+  } {
+    simpl.
+    case_eq (firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier);
+      intros; [|neqConstructor].
+    destruct p; destruct p; destruct a.
+    eapply IHl.
+    specialize (remove_length _ _ _ _ _ _ H); intro H'.
+    rewrite <- Heql in H'.
+    auto.
+  }
 Qed.
 
 Definition bfs (g:graph) (frontier:list node) : parent_t.
-  remember (bfs''' g frontier) as ret.
+  remember (bfs' (length g) g frontier nil) as ret.
   destruct ret.
   - apply p.
   - destruct (bfs_terminates _ _ (eq_sym Heqret)).
-Qed.
+Defined.
 
 Example ex1 : (bfs [(Node 0,[Node 1])] [Node 0]) = [(Node 1, Node 0)].
   compute. (* Why does it not work? *)
 Abort.
+
+Lemma no_aliens : forall g s parent, bfs g s = parent ->
+    forall u v, In (u, v) parent ->
+    exists neighbors, In (v, neighbors) g /\ In u neighbors.
+Admitted.
+
+(* This assumes that the statement (u's parent is v) comes before any statement
+ about v's parents. This is true in out BFS implementation, and will probably
+ remain true for any extension of it, but it is not an integral property of BFS
+ -- it is just a requirement on the output format. We could get id of this
+ requirement, but then the termination argument for traceParent would depend on
+ the assumption that parsing the parent map does not lead to cyclic paths. *)
+Fixpoint traceParent (parent:parent_t) (u:node) {struct parent} : list node :=
+  match parent with
+  | nil => []
+  | p::parent' =>
+    if node_eq_dec (fst p) u
+    then (snd p)::(traceParent parent' (snd p))
+    else traceParent parent' u
+end.
+
+Example ex2 :
+  traceParent [(Node 3, Node 2); (Node 2, Node 0); (Node 1, Node 0)] (Node 3) =
+  [Node 2; Node 0].
+Abort. (* Why does this not work again... *)
