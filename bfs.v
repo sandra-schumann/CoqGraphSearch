@@ -18,8 +18,11 @@ Definition node_in_dec := in_dec node_eq_dec.
 Definition adj := (node * list node)%type.
 Definition graph := list adj.
 
-Definition edgeStarts (g:graph) : list node := map (@fst node (list node)) g.
-Definition GoodGraph g := NoDup (edgeStarts g).
+Definition nodes (g:graph) : list node := map (@fst node (list node)) g.
+Definition hasEdge (g : graph) (n1 n2 : node) : Prop :=
+  exists (neighbors : list node), In (n1, neighbors) g /\ In n2 neighbors.
+Definition GoodGraph g := NoDup (nodes g) /\ forall u v, hasEdge g u v -> In v (nodes g).
+
 Definition parent_t := list (node * node).
 
 Fixpoint lookupEdgesAndRemove (g:graph) (v:node) {struct g} : option (adj * graph) :=
@@ -133,84 +136,47 @@ Lemma no_aliens : forall g s parent, bfs g s = parent ->
     exists neighbors, In (v, neighbors) g /\ In u neighbors.
 Abort.
 
+Definition path := (node * list node)%type.
+Definition destination (p:path) := fst p.
+Definition route (p:path) := snd p.
+Definition length (p : path) : nat := length (route p).
+Definition origin (p : path) : node := last (route p) (destination p).
+
 (* This assumes that the statement (u's parent is v) comes before any statement
  about v's parents. This is true in out BFS implementation, and will probably
  remain true for any extension of it, but it is not an integral property of BFS
  -- it is just a requirement on the output format. We could get rid of this
  requirement, but then the termination argument for traceParent would depend on
- the assumption that parsing the parent map does not lead to cyclic paths. *)
-Fixpoint traceParent (parent:parent_t) (u:node) {struct parent} : list node :=
+ the assumption that parsing the parent map does not lead to cyclic paths.  We
+ plan to prove things about the output of traceParent when it is run on the
+ output of bfs, so thedivision of labor between the two should not matter a
+ whole lot. *)
+Fixpoint traceParent' (parent:parent_t) (u:node) {struct parent} : list node :=
   match parent with
   | nil => []
   | p::parent' =>
     if node_eq_dec (fst p) u
-    then (snd p)::(traceParent parent' (snd p))
-    else traceParent parent' u
+    then (snd p)::(traceParent' parent' (snd p))
+    else traceParent' parent' u
 end.
-
-Lemma bfs_paths_start : forall g s parent, bfs g s = parent ->
-   forall v p, traceParent parent v = p -> p <> nil ->
-   forall d, In (last p d) s.
-Abort.
+Definition traceParent (parent:parent_t) (u:node) := (u, traceParent' parent u).
+Definition bfsAllPaths g s := let parent := bfs g s in map (fun p => traceParent parent (fst p)) parent. 
 
 Example ex2 :
-  traceParent [(Node 3, Node 2); (Node 2, Node 0); (Node 1, Node 0)] (Node 3) =
+  traceParent' [(Node 3, Node 2); (Node 2, Node 0); (Node 1, Node 0)] (Node 3) =
   [Node 2; Node 0].
 Abort. (* Why does this not work again... *)
 
-Inductive path : Type :=
-  | Starts : node -> path
-  | Cons : path -> node -> path.
-
-Definition hasEdge (g : graph) (n1 n2 : node) : Prop :=
-  exists (neighbors : list node), In (n1, neighbors) g /\ In n2 neighbors.
-
-Fixpoint length (p : path) : nat :=
-  match p with
-    | Starts _ => 0
-    | Cons p' _ => S(length p')
-  end.
-
-Fixpoint startNode (p : path) : node :=
-  match p with
-    | Starts n => n
-    | Cons p' _ => startNode p'
-  end.
-
-Definition endNode (p : path) : node :=
-  match p with
-    | Starts n => n
-    | Cons _ n => n
-  end.
-
-Definition nodes (g : graph) := edgeStarts g. (* TODO: dummy *)
-
-(* Fixpoint hasPath (g : graph) (p : path) : Prop :=
-     match p with
-       | Starts n => In n (nodes g)
-       | Cons p' n => match p' with
-                        | Starts n' => hasEdge g n' n
-                        | Cons _ n' => hasEdge g n' n /\ hasPath g p'
-                      end
-     end.*)
-
 Inductive hasPath : graph -> path -> Prop :=
-| IdPath : forall g n, In n (nodes g) -> hasPath g (Starts n)
-| ConsPath : forall g n n' p', hasPath g p' ->
-             endNode p' = n -> hasEdge g n n' -> hasPath g (Cons p' n').
+| IdPath : forall g n, In n (nodes g) -> hasPath g (n, [])
+| ConsPath : forall g n n' r', hasEdge g n n' -> hasPath g (n, r') -> hasPath g (n', n::r').
 
 Definition reachable (startn : node) (endn : node) (g : graph) : Prop :=
-  exists (p : path), hasPath g p /\ startNode p = startn /\ endNode p = endn.
-
-Definition paths_from_parents (p:parent_t) : list path :=
-  nil. (* TODO: put the real def in *)
-
-(* Tõestada: kui paths_from_parents väljastab pathi, siis path_in_graph.
-   Tõestada: kui paths_from_parents väljastab pathi, siis In frontier (startNode p) *)
+  exists (p : path), hasPath g p /\ origin p = startn /\ destination p = endn.
 
 (* Pseudocode:
 bfs is corrent if
-  for all graphs g, initial frontiers, nodes n1 and n2 in g
+  for all good graphs g, initial frontiers, nodes n1 and n2 in g
     if bfs finds a path, this path is in g
       and the beginning node of this path is in the frontier
     and
@@ -232,28 +198,21 @@ bfs is corrent if
        then bfs does not find a path from n1 to n2")
 *)
 
-Definition path_eq_dec : forall (p q:path), {p = q} + {p <> q}.
-  decide equality; apply node_eq_dec.
-Qed.
-
 Definition bfs_correct : Prop :=
-  forall (g : graph) (frontier : list node) (n1 : node) (n2 : node),
-    (forall (p : path), In p (paths_from_parents (bfs g frontier)) ->
-       hasPath g p /\ In (startNode p) frontier)
+  forall (g : graph), GoodGraph g ->
+  forall (frontier : list node) (n1 : node) (n2 : node),
+    (forall (p : path), In p (bfsAllPaths g frontier) ->
+       hasPath g p /\ In (origin p) frontier)
     /\
     (reachable n1 n2 g -> In n1 frontier ->
-      exists (p : path), In p (paths_from_parents (bfs g frontier)) /\
-        n1 = startNode p /\ n2 = endNode p /\
-        (forall (p' : path), n1 = startNode p' ->
-           n2 = endNode p' ->
+      exists (p : path), In p (bfsAllPaths g frontier) /\
+        n1 = origin p /\ n2 = destination p /\
+        (forall (p' : path), n1 = origin p' ->
+           n2 = destination p' ->
            (hasPath g p' -> length p' >= length p)
-           /\ (p <> p' -> ~(In p (paths_from_parents (bfs g frontier))))))
+           /\ (p <> p' -> ~(In p (bfsAllPaths g frontier)))))
     /\
     (~(reachable n1 n2 g) ->
       forall (p' : path),
-        In p' (paths_from_parents (bfs g frontier)) ->
-        n1 = startNode p' -> n2 <> endNode p').
-
-(* Tõestada: kõik, mis BFS leiab, on lühimad *)
-(* BFS: ei eksisteeri ühtegi teist teed *)
-(* BFS: kui ei ole reachable, siis bfs ei leia teed *)
+        In p' (bfsAllPaths g frontier) ->
+        n1 = origin p' -> n2 <> destination p').
