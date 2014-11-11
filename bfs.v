@@ -123,3 +123,75 @@ Qed.
 Example ex1 : (bfs [(Node 0,[Node 1])] [Node 0]) = [(Node 1, Node 0)].
   compute. (* Why does it not work? *)
 Abort.
+
+Inductive path : Type :=
+  | Starts : node -> path
+  | Cons : path -> node -> path.
+
+Definition hasEdge (g : graph) (n1 n2 : node) : Prop :=
+  exists (neighbors : list node), In (n1, neighbors) g /\ In n2 neighbors.
+
+Fixpoint length (p : path) : nat :=
+  match p with
+    | Starts _ => 0
+    | Cons p' _ => S(length p')
+  end.
+
+Fixpoint startNode (p : path) : node :=
+  match p with
+    | Starts n => n
+    | Cons p' _ => startNode p'
+  end.
+
+Definition endNode (p : path) : node :=
+  match p with
+    | Starts n => n
+    | Cons _ n => n
+  end.
+
+Definition nodes (g : graph) := edgeStarts g. (* TODO: dummy *)
+
+(* Fixpoint hasPath (g : graph) (p : path) : Prop :=
+     match p with
+       | Starts n => In n (nodes g)
+       | Cons p' n => match p' with
+                        | Starts n' => hasEdge g n' n
+                        | Cons _ n' => hasEdge g n' n /\ hasPath g p'
+                      end
+     end.*)
+
+Inductive hasPath : graph -> path -> Prop :=
+| IdPath : forall g n, In n (nodes g) -> hasPath g (Starts n)
+| ConsPath : forall g n n' p', hasPath g p' ->
+             endNode p' = n -> hasEdge g n n' -> hasPath g (Cons p' n').
+
+Definition reachable (startn : node) (endn : node) (g : graph) : Prop :=
+  exists (p : path), hasPath g p /\ startNode p = startn /\ endNode p = endn.
+
+Definition paths_from_parents (p:parent_t) : list path :=
+  nil. (* TODO: put the real def in *)
+
+(* Tõestada: kui paths_from_parents väljastab pathi, siis path_in_graph.
+   Tõestada: kui paths_from_parents väljastab pathi, siis In frontier (startNode p) *)
+
+(* Pseudocode:
+bfs is correct if
+  for all graphs g, initial frontiers, two nodes n1 and n2 in g
+    if n1 is in the initial frontier and n2 is reachable from n1
+    then exists a path p such that bfs finds this path
+      and the startnode is n1 and endnode n2
+      and for all other paths p' in this graph with same start and end
+        the length (cost) of p' is greater or equal to the length of p
+(also note that the path found by bfs is in g by above)
+*)
+
+Definition bfs_finds_shortest : Prop :=
+  forall (g : graph) (frontier : list node) (n1 : node) (n2 : node),
+    In n1 frontier -> reachable n1 n2 g ->
+    exists (p : path), In p (paths_from_parents (bfs g frontier)) /\
+      n1 = startNode p /\ n2 = endNode p /\
+      (forall (p' : path), n1 = startNode p' ->
+         n2 = endNode p' -> path_in_graph p' g ->
+         length p' >= length p).
+
+(* Tõestada: kõik, mis BFS leiab, on lühimad *)
