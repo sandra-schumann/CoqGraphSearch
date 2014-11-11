@@ -132,8 +132,7 @@ Example ex1 : (bfs [(Node 0,[Node 1])] [Node 0]) = [(Node 1, Node 0)].
 Abort.
 
 Lemma no_aliens : forall g s parent, bfs g s = parent ->
-    forall u v, In (u, v) parent ->
-    exists neighbors, In (v, neighbors) g /\ In u neighbors.
+    forall u v, In (u, v) parent -> hasEdge g u v.
 Abort.
 
 Definition path := (node * list node)%type.
