@@ -148,7 +148,7 @@ Definition startNode (p : path) : node := last (route p) (destination p).
  requirement, but then the termination argument for traceParent would depend on
  the assumption that parsing the parent map does not lead to cyclic paths.  We
  plan to prove things about the output of traceParent when it is run on the
- output of bfs, so thedivision of labor between the two should not matter a
+ output of bfs, so the division of labor between the two should not matter a
  whole lot. *)
 Fixpoint traceParent' (parent:parent_t) (u:node) {struct parent} : list node :=
   match parent with
