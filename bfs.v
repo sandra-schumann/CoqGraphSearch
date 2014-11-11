@@ -131,12 +131,12 @@ Abort.
 Lemma no_aliens : forall g s parent, bfs g s = parent ->
     forall u v, In (u, v) parent ->
     exists neighbors, In (v, neighbors) g /\ In u neighbors.
-Admitted.
+Abort.
 
 (* This assumes that the statement (u's parent is v) comes before any statement
  about v's parents. This is true in out BFS implementation, and will probably
  remain true for any extension of it, but it is not an integral property of BFS
- -- it is just a requirement on the output format. We could get id of this
+ -- it is just a requirement on the output format. We could get rid of this
  requirement, but then the termination argument for traceParent would depend on
  the assumption that parsing the parent map does not lead to cyclic paths. *)
 Fixpoint traceParent (parent:parent_t) (u:node) {struct parent} : list node :=
@@ -147,6 +147,11 @@ Fixpoint traceParent (parent:parent_t) (u:node) {struct parent} : list node :=
     then (snd p)::(traceParent parent' (snd p))
     else traceParent parent' u
 end.
+
+Lemma bfs_paths_start : forall g s parent, bfs g s = parent ->
+   forall v p, traceParent parent v = p -> p <> nil ->
+   forall d, In (last p d) s.
+Abort.
 
 Example ex2 :
   traceParent [(Node 3, Node 2); (Node 2, Node 0); (Node 1, Node 0)] (Node 3) =
