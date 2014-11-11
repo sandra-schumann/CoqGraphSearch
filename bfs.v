@@ -18,8 +18,11 @@ Definition node_in_dec := in_dec node_eq_dec.
 Definition adj := (node * list node)%type.
 Definition graph := list adj.
 
-Definition edgeStarts (g:graph) : list node := map (@fst node (list node)) g.
-Definition GoodGraph g := NoDup (edgeStarts g).
+Definition nodes (g:graph) : list node := map (@fst node (list node)) g.
+Definition hasEdge (g : graph) (n1 n2 : node) : Prop :=
+  exists (neighbors : list node), In (n1, neighbors) g /\ In n2 neighbors.
+Definition GoodGraph g := NoDup (nodes g) /\ forall u v, hasEdge g u v -> In v (nodes g).
+
 Definition parent_t := list (node * node).
 
 Fixpoint lookupEdgesAndRemove (g:graph) (v:node) {struct g} : option (adj * graph) :=
@@ -157,16 +160,12 @@ Fixpoint traceParent' (parent:parent_t) (u:node) {struct parent} : list node :=
     else traceParent' parent' u
 end.
 Definition traceParent (parent:parent_t) (u:node) := (u, traceParent' parent u).
+Definition bfsAllPaths g s := let parent := bfs g s in map (fun p => traceParent parent (fst p)) parent. 
 
 Example ex2 :
   traceParent' [(Node 3, Node 2); (Node 2, Node 0); (Node 1, Node 0)] (Node 3) =
   [Node 2; Node 0].
 Abort. (* Why does this not work again... *)
-
-Definition hasEdge (g : graph) (n1 n2 : node) : Prop :=
-  exists (neighbors : list node), In (n1, neighbors) g /\ In n2 neighbors.
-
-Definition nodes (g : graph) := edgeStarts g. (* TODO: dummy *)
 
 Inductive hasPath : graph -> path -> Prop :=
 | IdPath : forall g n, In n (nodes g) -> hasPath g (n, [])
@@ -197,7 +196,7 @@ Definition node_in_dec := in_dec node_eq_dec.*)
 Definition bfs_finds_shortest : Prop :=
   forall (g : graph) (frontier : list node) (n1 : node) (n2 : node),
     In n1 frontier -> reachable n1 n2 g ->
-    exists (p : path), In p (paths_from_parents (bfs g frontier)) /\
+    exists (p : path), In p (bfsAllPaths g frontier) /\
       n1 = startNode p /\ n2 = destination p /\
       (forall (p' : path), n1 = startNode p' ->
          n2 = destination p' -> hasPath g p' ->
