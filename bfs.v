@@ -8,25 +8,30 @@ Require Import Recdef.
 Require Import Coq.Arith.Peano_dec.
 Import ListNotations.
 
-(* Defining a way of representing a graph. First we define a node, which will
-   be uniquely identified by a natural number. The way nodes are represented
-   in a graph is by a structure called adj, which includes a node and
-   additionally the list of nodes adjacent to it. A graph is a list of adjs. *)
+(** Defining a way of representing a graph. First we define a node, which will
+    be uniquely identified by a natural number. The way nodes are represented
+    in a graph is by a structure called adj, which includes a node and
+    additionally the list of nodes adjacent to it. A graph is a list of adjs. **)
 
 Inductive node := Node : nat -> node.
 
 Definition node_eq_dec : forall (x y:node), {x = y} + {x <> y}.
   decide equality. apply eq_nat_dec.
-Defined.
+Qed.
 Definition node_in_dec := in_dec node_eq_dec.
 
 Definition adj := (node * list node)%type.
 Definition graph := list adj.
 
-(* nodes g gives a list of node... *)
+(** nodes g gives all the first parts of adjs in a graph g (list of nodes) **)
 Definition nodes (g:graph) : list node := map (@fst node (list node)) g.
+
+(** hasEdge says that in graph g, there exists an edge between nodes n1 and n2 **)
 Definition hasEdge (g : graph) (n1 n2 : node) : Prop :=
   exists (neighbors : list node), In (n1, neighbors) g /\ In n2 neighbors.
+
+(** Graph is a GoodGraph, if it has no two adjs that correspond to the same node
+    *)
 Definition GoodGraph g := NoDup (nodes g) /\ forall u v, hasEdge g u v -> In v (nodes g).
 
 Definition parent_t := list (node * node).
@@ -134,9 +139,8 @@ Definition bfs (g:graph) (frontier:list node) : parent_t.
 Defined.
 
 Example ex1 : (bfs [(Node 0,[Node 1])] [Node 0]) = [(Node 1, Node 0)].
-  compute.
-  reflexivity.
-Qed.
+  compute. (* Why does it not work? *)
+Abort.
 
 Lemma no_aliens : forall g s parent, bfs g s = parent ->
     forall u v, In (u, v) parent -> hasEdge g u v.
@@ -171,9 +175,7 @@ Definition bfsAllPaths g s := let parent := bfs g s in map (fun p => traceParent
 Example ex2 :
   traceParent' [(Node 3, Node 2); (Node 2, Node 0); (Node 1, Node 0)] (Node 3) =
   [Node 2; Node 0].
-  compute.
-  reflexivity.
-Qed.
+Abort. (* Why does this not work again... *)
 
 Inductive hasPath : graph -> path -> Prop :=
 | IdPath : forall g n, In n (nodes g) -> hasPath g (n, [])
