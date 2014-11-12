@@ -8,6 +8,11 @@ Require Import Recdef.
 Require Import Coq.Arith.Peano_dec.
 Import ListNotations.
 
+(* Defining a way of representing a graph. First we define a node, which will
+   be uniquely identified by a natural number. The way nodes are represented
+   in a graph is by a structure called adj, which includes a node and
+   additionally the list of nodes adjacent to it. A graph is a list of adjs. *)
+
 Inductive node := Node : nat -> node.
 
 Definition node_eq_dec : forall (x y:node), {x = y} + {x <> y}.
@@ -18,6 +23,7 @@ Definition node_in_dec := in_dec node_eq_dec.
 Definition adj := (node * list node)%type.
 Definition graph := list adj.
 
+(* nodes g gives a list of node... *)
 Definition nodes (g:graph) : list node := map (@fst node (list node)) g.
 Definition hasEdge (g : graph) (n1 n2 : node) : Prop :=
   exists (neighbors : list node), In (n1, neighbors) g /\ In n2 neighbors.
