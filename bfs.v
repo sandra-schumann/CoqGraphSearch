@@ -199,7 +199,7 @@ Inductive hasPath : graph -> path -> Prop :=
 Definition reachable (startn : node) (endn : node) (g : graph) : Prop :=
   exists (p : path), hasPath g p /\ origin p = startn /\ destination p = endn.
 
-(** Pseudocode:
+(** Pseudocode for the definition of correctness of bfs:
 [bfs] is correct if
   for all good graphs g, initial frontiers, nodes n1 and n2 in g
     if [bfs] finds a path, this path is in [g]
@@ -221,6 +221,8 @@ Definition reachable (startn : node) (endn : node) (g : graph) : Prop :=
       if p' starts from n1, it cannot end in n2
       (a long way of saying "if n2 is not reachable from n1
        then bfs does not find a path from n1 to n2")
+  
+  This is a rather unclear definition of correctness and should be rewritten.
 **)
 
 Definition bfs_correct : Prop :=
