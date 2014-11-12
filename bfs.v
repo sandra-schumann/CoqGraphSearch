@@ -17,7 +17,7 @@ Inductive node := Node : nat -> node.
 
 Definition node_eq_dec : forall (x y:node), {x = y} + {x <> y}.
   decide equality. apply eq_nat_dec.
-Qed.
+Defined.
 Definition node_in_dec := in_dec node_eq_dec.
 
 Definition adj := (node * list node)%type.
@@ -134,8 +134,9 @@ Definition bfs (g:graph) (frontier:list node) : parent_t.
 Defined.
 
 Example ex1 : (bfs [(Node 0,[Node 1])] [Node 0]) = [(Node 1, Node 0)].
-  compute. (* Why does it not work? *)
-Abort.
+  compute.
+  reflexivity.
+Qed.
 
 Lemma no_aliens : forall g s parent, bfs g s = parent ->
     forall u v, In (u, v) parent -> hasEdge g u v.
@@ -170,7 +171,9 @@ Definition bfsAllPaths g s := let parent := bfs g s in map (fun p => traceParent
 Example ex2 :
   traceParent' [(Node 3, Node 2); (Node 2, Node 0); (Node 1, Node 0)] (Node 3) =
   [Node 2; Node 0].
-Abort. (* Why does this not work again... *)
+  compute.
+  reflexivity.
+Qed.
 
 Inductive hasPath : graph -> path -> Prop :=
 | IdPath : forall g n, In n (nodes g) -> hasPath g (n, [])
