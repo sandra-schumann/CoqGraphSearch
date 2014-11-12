@@ -70,7 +70,7 @@ Lemma remove_length' : forall g a v neighbors g',
 Qed.
 
 (** [firstForWhichSomeAndTail] computes the following two expressions (or [None] if [head] fails):
-    -  [head (dropWhile isNone (map f xs))]
+    -  [fromMybe (head (dropWhile isNone (map f xs)))]
     -  [tail (dropWhile (isNone . f) xs)]
 **)
 Fixpoint firstForWhichSomeAndTail {A B:Type} (f:A->option B) (xs:list A) {struct xs} : option (B * list A) :=
