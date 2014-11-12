@@ -201,10 +201,13 @@ Example ex2 :
   [Node 2; Node 0].
 Abort. (* Why does this not work again... *)
 
+(** hasPath indicates that a path p is a valid path in a graph g **)
 Inductive hasPath : graph -> path -> Prop :=
 | IdPath : forall g n, In n (nodes g) -> hasPath g (n, [])
 | ConsPath : forall g n n' r', hasEdge g n n' -> hasPath g (n, r') -> hasPath g (n', n::r').
 
+(** node endn is reachable from node startn if there exists a path from
+    startn to endn in a graph g **)
 Definition reachable (startn : node) (endn : node) (g : graph) : Prop :=
   exists (p : path), hasPath g p /\ origin p = startn /\ destination p = endn.
 
