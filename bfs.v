@@ -170,6 +170,14 @@ Lemma no_aliens : forall g s parent, bfs g s = parent ->
     forall u v, In (u, v) parent -> hasEdge g u v.
 Abort.
 
+(** A path is essentially a list of nodes representing a series of edges
+    leading from one node (the origin) to another (the destination).
+    The part of the path leading up to the destination (meaning all of
+    it without the last node) is in this implementation called the route.
+    The length of a path is the number of edges in the path, or alternatively
+    the number of nodes minus one. This way the length of a path leading
+    from a node to itself is 0, a path with just two nodes on it has length 1
+    and so on. **)
 Definition path := (node * list node)%type.
 Definition destination (p:path) := fst p.
 Definition route (p:path) := snd p.
