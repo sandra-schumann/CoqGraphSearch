@@ -31,9 +31,14 @@ Definition hasEdge (g : graph) (n1 n2 : node) : Prop :=
   exists (neighbors : list node), In (n1, neighbors) g /\ In n2 neighbors.
 
 (** Graph is a GoodGraph, if it has no two adjs that correspond to the same node
-    *)
+    and if there is an edge from node u to v  in a graph, then there exists
+    an adj construction for v in g. **)
 Definition GoodGraph g := NoDup (nodes g) /\ forall u v, hasEdge g u v -> In v (nodes g).
 
+(** parent_t is a data structure for indicating for a list of nodes their "parents".
+    A "parent" of a node will be used in the bfs function: essentially if bfs
+    finds some node v by looking at nodes adjacent to some node u, then u is the
+    parent of v. **)
 Definition parent_t := list (node * node).
 
 Fixpoint lookupEdgesAndRemove (g:graph) (v:node) {struct g} : option (adj * graph) :=
