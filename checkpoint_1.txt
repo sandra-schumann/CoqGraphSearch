@@ -1,0 +1,62 @@
+Checkpoint 1
+============
+
+Parts done so far
+-----------------
+
+The project has so far progressed to the length of approximately 200 lines of
+code. This code and the process of crafting it has progressed through the
+following major steps:
+* Choosing a way to represent a graph and modelling it in Coq
+* Choosing a way to program BFS, coding it up (including proof of termination)
+* Defining "correctness" of BFS (if not in the ideal way)
+
+Process and problems solved
+---------------------------
+
+In the process of choosing a way to represent graphs, different representations
+were both considered and implemented. The final version was chosen according to
+what would be easiest for proving the termination of BFS.
+
+When implementing BFS, again, different approaches were considered, ranging
+from just rewriting the search algorithm code that would be written in C in Coq
+to slightly modifying the definition of BFS to have code be as simple as
+possible. One of the main issues encountered was proving that the algorithm
+terminates. When trying to just rewrite imperative code in Coq, the termination
+arguments were long enough to possibly generate code for which any correctness
+proofs would be overly complicated. A different approach with slightly modified
+definition of BFS attempted to avoid the termination issue altogether by just
+defining one step of the algorithm, taking as an argument fuel and taking the
+corresponding number of steps. Neither of them were ideal.
+
+The final version was chosen to be a compromise between several attempts,
+looking fairly similar to what the corresponding imperative pseudocode would
+be, but at the same time strictly decreasing on one of its arguments, so
+termination is not a big issue. Additionally, it was taken into account that
+the implementation should be convertable into Dijkstra's algorithm with as
+little modifications as possible, with the intent of being able to reuse parts
+of the BFS proof for Dijkstra's algorithm.
+
+The "correctness" definition progressed through several stages as well. Every
+once in a while some loophole was discovered in the definition. The current
+version seems to include all the necessary details, but the code itself is
+not exactly human-readable. For improving it, the idea is to break the big
+definition of correctness into several smaller ones that must all be satisfied.
+This would probably also make the process of proving them much simpler.
+
+Problems not solved
+-------------------
+
+Coq refuses to compute the result of running bfs code on a simple input for
+reasons beyond us. This problem should be solved.
+
+Parts yet to do
+---------------
+
+The following big parts of the final project are yet to be done:
+* Proving the correctness of BFS
+If there is enough time after proving the correctness of BFS:
+* Implementing Dijkstra's algorithm
+* Defining correctness of Dijkstra's algorithm (this would be based on the
+  correctness of BFS and ideally differ as little as possible)
+* Proving the correctness of Dijkstra's algorithm
