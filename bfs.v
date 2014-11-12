@@ -98,6 +98,12 @@ Lemma remove_length : forall g v neighbors frontier g' frontier',
     rewrite H0 in H1. rewrite H1. auto.
 Qed.
 
+(** One [bfs] iteration takes a node from the frontier, removes its adjecency
+ list from the graph and adds all nodes in that list to the frontier while also
+ remembering the current node as their parent. **)
+(** This implementation uses [Coq]'s [Function] to define BFS, but as the body
+   is not a tree of matches, we still don't get [functional induction], so it
+   may not be worthwhile **)
 Function bfs_function' (args : graph * list node * parent_t)
     {measure (fun args => length (fst (fst (args))))} : parent_t := 
   let (args', parent) := args in let (g, frontier) := args' in
@@ -111,6 +117,9 @@ end.
 Qed.
 Definition bfs_function g frontier := bfs_function' (g, frontier, nil).
 
+(** This implementation uses defines BFS using fuel. Later, we prove that the
+  length of the graph is sufficient fuel and thus the return type does not need
+  to be [option]. **)
 Fixpoint bfs' (len_g:nat) (g:graph) (frontier : list node) (parent:parent_t)
     {struct len_g} : option parent_t := 
   match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
@@ -154,7 +163,7 @@ Definition bfs (g:graph) (frontier:list node) : parent_t.
 Defined.
 
 Example ex1 : (bfs [(Node 0,[Node 1])] [Node 0]) = [(Node 1, Node 0)].
-  compute. (* Why does it not work? *)
+  compute.
 Abort.
 
 Lemma no_aliens : forall g s parent, bfs g s = parent ->
@@ -167,7 +176,7 @@ Definition route (p:path) := snd p.
 Definition length (p : path) : nat := length (route p).
 Definition origin (p : path) : node := last (route p) (destination p).
 
-(* This assumes that the statement (u's parent is v) comes before any statement
+(** This assumes that the statement (u's parent is v) comes before any statement
  about v's parents. This is true in out BFS implementation, and will probably
  remain true for any extension of it, but it is not an integral property of BFS
  -- it is just a requirement on the output format. We could get rid of this
@@ -175,7 +184,7 @@ Definition origin (p : path) : node := last (route p) (destination p).
  the assumption that parsing the parent map does not lead to cyclic paths.  We
  plan to prove things about the output of traceParent when it is run on the
  output of bfs, so the division of labor between the two should not matter a
- whole lot. *)
+ whole lot. **)
 Fixpoint traceParent' (parent:parent_t) (u:node) {struct parent} : list node :=
   match parent with
   | nil => []
