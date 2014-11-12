@@ -25,6 +25,10 @@ Definition GoodGraph g := NoDup (nodes g) /\ forall u v, hasEdge g u v -> In v (
 
 Definition parent_t := list (node * node).
 
+(** [lookupEdgesAndRemove] locates the adjacency list of node [v] in graph [g]
+ and removes it from the graph. If [v]'s adjacency list is not a part of [g]
+ (possibly because a previous call to this function removed it), [None] is
+ returned. **)
 Fixpoint lookupEdgesAndRemove (g:graph) (v:node) {struct g} : option (adj * graph) :=
   match g with
   | nil => None
@@ -36,6 +40,7 @@ Fixpoint lookupEdgesAndRemove (g:graph) (v:node) {struct g} : option (adj * grap
       end
   end.
 
+(** A graph with an adjacency list removed is smaller than the original **)
 Lemma remove_length' : forall g a v neighbors g',
     lookupEdgesAndRemove g a = Some (v, neighbors, g') -> length g = S (length g').
   induction g; intros; [inversion H|].
@@ -48,6 +53,10 @@ Lemma remove_length' : forall g a v neighbors g',
     apply (IHg _ _ _ _ H0).
 Qed.
 
+(** [firstForWhichSomeAndTail] computes the following two expressions (or [None] if [head] fails):
+    -  [head (dropWhile isNone (map f xs))]
+    -  [tail (dropWhile (isNone . f) xs)]
+**)
 Fixpoint firstForWhichSomeAndTail {A B:Type} (f:A->option B) (xs:list A) {struct xs} : option (B * list A) :=
   match xs with
   | nil => None
@@ -57,6 +66,7 @@ Fixpoint firstForWhichSomeAndTail {A B:Type} (f:A->option B) (xs:list A) {struct
     end
   end. 
 
+(** A graph with any adjacency list removed is smaller than the original **)
 Lemma remove_length : forall g v neighbors frontier g' frontier',
   firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier = Some (v, neighbors, g', frontier') ->
   length g = S (length g').
@@ -176,10 +186,10 @@ Inductive hasPath : graph -> path -> Prop :=
 Definition reachable (startn : node) (endn : node) (g : graph) : Prop :=
   exists (p : path), hasPath g p /\ origin p = startn /\ destination p = endn.
 
-(* Pseudocode:
-bfs is corrent if
+(** Pseudocode:
+[bfs] is correct if
   for all good graphs g, initial frontiers, nodes n1 and n2 in g
-    if bfs finds a path, this path is in g
+    if [bfs] finds a path, this path is in [g]
       and the beginning node of this path is in the frontier
     and
     if n2 is reachable from n1 and n1 is in the frontier
@@ -198,7 +208,7 @@ bfs is corrent if
       if p' starts from n1, it cannot end in n2
       (a long way of saying "if n2 is not reachable from n1
        then bfs does not find a path from n1 to n2")
-*)
+**)
 
 Definition bfs_correct : Prop :=
   forall (g : graph), GoodGraph g ->
