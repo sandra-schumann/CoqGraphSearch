@@ -98,6 +98,25 @@ Lemma remove_length : forall g v neighbors frontier g' frontier',
     rewrite H0 in H1. rewrite H1. auto.
 Qed.
 
+Definition bfs_funcstep (args : graph * list node * parent_t) :
+  option (graph * list node * parent_t) :=
+  let (args', parent) := args in let (g, frontier) := args' in
+  match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
+  | None => None
+  | Some (v, neighbors, g', frontier') => Some (g', frontier',
+               fold_right (fun u pr => (u,v)::pr) parent neighbors)
+end.
+
+Function bfs_function' (args : graph * list node * parent_t)
+    {measure (fun args => length (fst (fst (args))))} : parent_t :=
+  let oargs := bfs_funcstep args in
+  match bfs_funcstep args with
+  | None => let (_, parent) := args in parent
+  | Some args' => bfs_function' args'
+end.
+
+
+
 (** One [bfs] iteration takes a node from the frontier, removes its adjecency
  list from the graph and adds all nodes in that list to the frontier while also
  remembering the current node as their parent. **)
