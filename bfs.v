@@ -265,7 +265,9 @@ Definition finds_max_one_path_per_pair : Prop :=
 Definition finds_the_shortest_path : Prop :=
   forall (g : graph), GoodGraph g ->
     forall (s : node) (d : node), reachable s d g ->
-      True.
+      forall (frontier : list node) (p : path),
+        In p (bfsAllPaths g frontier) -> s = origin p -> d = destination p ->
+        forall (p' : path), hasPath g p' -> length p' >= length p.
 
 Definition bfs_correct : Prop :=
   forall (g : graph), GoodGraph g ->
