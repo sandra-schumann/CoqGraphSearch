@@ -101,7 +101,7 @@ Qed.
 Definition notSet (m:parent_t) (k:node) :=
     if node_in_dec k (map (@fst node node) m) then true else false.
 
-Definition bfs_funcstep (args : graph * list node * parent_t) :
+Definition bfs_step (args : graph * list node * parent_t) :
   option (graph * list node * parent_t) :=
   let (args', parent) := args in let (g, frontier) := args' in
   match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
@@ -111,13 +111,13 @@ Definition bfs_funcstep (args : graph * list node * parent_t) :
                (filter (notSet parent) neighbors))
 end.
 
-Function bfs_function'' (args : graph * list node * parent_t)
+Function bfs (args : graph * list node * parent_t)
     {measure (fun args => length (fst (fst (args))))} : parent_t :=
-  match bfs_funcstep args with
+  match bfs_step args with
   | None => let (_, parent) := args in parent
-  | Some args' => bfs_function'' args'
+  | Some args' => bfs args'
 end.
-unfold bfs_funcstep.
+unfold bfs_step.
 intros.
 destruct args; destruct p; destruct args'; destruct p.
 subst; simpl in *.
@@ -128,76 +128,16 @@ injection teq; clear teq; intros; subst.
 rewrite (remove_length _ _ _ _ _ _ (eq_sym Heqtup)); auto.
 Qed.
 
-(** One [bfs] iteration takes a node from the frontier, removes its adjecency
- list from the graph and adds all nodes in that list to the frontier while also
- remembering the current node as their parent. **)
-(** This implementation uses [Coq]'s [Function] to define BFS, but as the body
-   is not a tree of matches, we still don't get [functional induction], so it
-   may not be worthwhile **)
-Function bfs_function' (args : graph * list node * parent_t)
-    {measure (fun args => length (fst (fst (args))))} : parent_t := 
-  let (args', parent) := args in let (g, frontier) := args' in
-  match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
-  | None => parent
-  | Some (v, neighbors, g', frontier') => bfs_function' (g', frontier',
-               fold_right (fun u pr => (u,v)::pr) parent neighbors)
-end.
-  intros; subst; simpl.
-  rewrite (remove_length _ _ _ _ _ _ teq1); auto.
-Qed.
-Definition bfs_function g frontier := bfs_function' (g, frontier, nil).
+Lemma bfs_graph_destruction' :
+    forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
+ bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
+  forall a, In a g1 -> In a g0.
+Abort.
 
-(** This implementation uses defines BFS using fuel. Later, we prove that the
-  length of the graph is sufficient fuel and thus the return type does not need
-  to be [option]. **)
-Fixpoint bfs' (len_g:nat) (g:graph) (frontier : list node) (parent:parent_t)
-    {struct len_g} : option parent_t := 
-  match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
-  | None => Some parent
-  | Some (((v, neighbors), g'), frontier') =>
-      match len_g with
-      | 0 => None
-      | S len_g' => bfs' len_g' g' frontier'
-               (fold_right (fun u pr => (u,v)::pr) parent neighbors)
-end end.
-
-Ltac neqConstructor := simpl; unfold not; intro H_; inversion H_.
-Lemma bfs_terminates : forall g frontier, bfs' (length g) g frontier nil <> None.
-  intros g frontier.
-  remember ([]) as parent; clear Heqparent.
-  remember (length g) as l.
-  generalize Heql; clear Heql.
-  generalize dependent parent.
-  generalize dependent frontier.
-  generalize dependent g.
-  induction l; intros; subst. {
-    Focus 1. destruct g; [|inversion Heql]. simpl.
-    induction frontier; neqConstructor. auto.
-  } {
-    simpl.
-    case_eq (firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier);
-      intros; [|neqConstructor].
-    destruct p; destruct p; destruct a.
-    eapply IHl.
-    specialize (remove_length _ _ _ _ _ _ H); intro H'.
-    rewrite <- Heql in H'.
-    auto.
-  }
-Qed.
-
-Definition bfs (g:graph) (frontier:list node) : parent_t.
-  remember (bfs' (length g) g frontier nil) as ret.
-  destruct ret.
-  - apply p.
-  - destruct (bfs_terminates _ _ (eq_sym Heqret)).
-Defined.
-
-Example ex1 : (bfs [(Node 0,[Node 1])] [Node 0]) = [(Node 1, Node 0)].
-  reflexivity.
-Qed.
-
-Lemma no_aliens : forall g s parent, bfs g s = parent ->
-    forall u v, In (u, v) parent -> hasEdge g u v.
+Lemma bfs_graph_destruction : forall (g:graph),
+     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
+  bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
+  (forall a, In a g0 -> In a g) -> (forall a, In a g1 -> In a g).
 Abort.
 
 (** A path is essentially a list of nodes representing a series of edges
@@ -232,24 +172,45 @@ Fixpoint traceParent' (parent:parent_t) (u:node) {struct parent} : list node :=
     else traceParent' parent' u
 end.
 Definition traceParent (parent:parent_t) (u:node) := (u, traceParent' parent u).
-Definition bfsAllPaths g s := let parent := bfs_function g s in map (fun p => traceParent parent (fst p)) parent. 
+Definition bfsAllPaths g s := let parent := bfs (g, s, []) in map (fun p => traceParent parent (fst p)) parent. 
 
-Example ex2 :
-  traceParent' [(Node 3, Node 2); (Node 2, Node 0); (Node 1, Node 0)] (Node 3) =
-  [Node 2; Node 0].
-  reflexivity.
-Qed.
+Lemma bfs_parent_unchanged_after_done :
+     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
+  bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
+  forall v, lookupEdgesAndRemove g0 v = None ->
+  traceParent parent0 v = traceParent parent1 v.
+Abort.
+
+Lemma bfs_parent_new_edges_valid :
+     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
+  bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
+  forall edge, ~ In edge parent0 -> In edge parent1 ->
+  hasEdge g0 (fst edge) (snd edge).
+Abort.
+
+Lemma bfs_parent_all_edges_valid : forall g,
+     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
+  bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
+  (forall e, In e parent0 -> hasEdge g (fst e) (snd e)) ->
+  (forall e, In e parent1 -> hasEdge g (fst e) (snd e)).
+Abort.
 
 (** hasPath indicates that a path p is a valid path in a graph g **)
 Inductive hasPath : graph -> path -> Prop :=
 | IdPath : forall g n, In n (nodes g) -> hasPath g (n, [])
 | ConsPath : forall g n n' r', hasEdge g n n' -> hasPath g (n, r') -> hasPath g (n', n::r').
 
+Lemma bfs_parent_all_paths_valid : forall g,
+     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
+  bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
+  (forall v, hasPath g (traceParent parent0 v)) -> 
+  (forall v, hasPath g (traceParent parent1 v)).
+Abort.
+
 (** node endn is reachable from node startn if there exists a path from
     startn to endn in a graph g **)
 Definition reachable (startn : node) (endn : node) (g : graph) : Prop :=
   exists (p : path), hasPath g p /\ origin p = startn /\ destination p = endn.
-
 
 (** The following section defines the correctness of BFS. **)
 
