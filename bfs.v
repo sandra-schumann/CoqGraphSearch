@@ -121,9 +121,12 @@ unfold bfs_funcstep.
 intros.
 destruct args; destruct p; destruct args'; destruct p.
 subst; simpl in *.
-rewrite (remove_length _ _ _ _ _ _ teq1); auto.
-
-
+remember (firstForWhichSomeAndTail (lookupEdgesAndRemove g) l) as tup.
+destruct tup; [|inversion teq].
+destruct p; destruct p; destruct a.
+injection teq; clear teq; intros; subst.
+rewrite (remove_length _ _ _ _ _ _ (eq_sym Heqtup)); auto.
+Qed.
 
 (** One [bfs] iteration takes a node from the frontier, removes its adjecency
  list from the graph and adds all nodes in that list to the frontier while also
