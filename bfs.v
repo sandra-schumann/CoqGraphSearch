@@ -243,6 +243,30 @@ Definition reachable (startn : node) (endn : node) (g : graph) : Prop :=
        then bfs does not find a path from n1 to n2")
 **)
 
+Definition finds_legit_paths : Prop :=
+  forall (g : graph), GoodGraph g ->
+    forall (frontier : list node) (p : path), In p (bfsAllPaths g frontier) ->
+      hasPath g p /\ In (origin p) frontier.
+
+Definition does_not_find_nonlegit_paths : Prop :=
+  forall (g : graph), GoodGraph g ->
+    forall (s : node) (d : node), ~(reachable s d g) ->
+      forall (frontier : list node) (p : path),
+        In p (bfsAllPaths g frontier) -> s = origin p -> d <> destination p.
+
+Definition finds_max_one_path_per_pair : Prop :=
+  forall (g : graph), GoodGraph g ->
+    forall (s : node) (d : node), reachable s d g ->
+      forall (frontier : list node) (p : path),
+        In p (bfsAllPaths g frontier) -> s = origin p -> d = destination p ->
+        forall (p' : path), s = origin p' -> d = destination p' ->
+          ~(In p (bfsAllPaths g frontier)).
+
+Definition finds_the_shortest_path : Prop :=
+  forall (g : graph), GoodGraph g ->
+    forall (s : node) (d : node), reachable s d g ->
+      True.
+
 Definition bfs_correct : Prop :=
   forall (g : graph), GoodGraph g ->
   forall (frontier : list node) (n1 : node) (n2 : node),
