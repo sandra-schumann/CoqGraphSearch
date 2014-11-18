@@ -111,11 +111,11 @@ Definition bfs_funcstep (args : graph * list node * parent_t) :
                (filter (notSet parent) neighbors))
 end.
 
-Function bfs_function' (args : graph * list node * parent_t)
+Function bfs_function'' (args : graph * list node * parent_t)
     {measure (fun args => length (fst (fst (args))))} : parent_t :=
   match bfs_funcstep args with
   | None => let (_, parent) := args in parent
-  | Some args' => bfs_function' args'
+  | Some args' => bfs_function'' args'
 end.
 unfold bfs_funcstep.
 intros.
