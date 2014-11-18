@@ -126,7 +126,27 @@ destruct tup; [|inversion teq].
 destruct p; destruct p; destruct a.
 injection teq; clear teq; intros; subst.
 rewrite (remove_length _ _ _ _ _ _ (eq_sym Heqtup)); auto.
-Qed.
+Defined.
+
+
+(* WTH, bfs_ind already exists now?? *)
+Check bfs_ind. (* maybe this is what we want *)
+
+Definition bfs_ind : forall (P : parent_t -> Prop),
+  (forall args, 
+      match bfs_step args with
+      | None => P (snd args)
+      | Some args' => P (bfs args')
+      end
+  )
+  ->
+  (forall args,
+    P ( match bfs_step args with
+      | None => let (_, parent) := args in parent
+      | Some args' => bfs args'
+      end
+    ) )
+  -> forall args, P (bfs args).
 
 Lemma bfs_graph_destruction' :
     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
