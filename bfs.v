@@ -220,71 +220,69 @@ Inductive hasPath : graph -> path -> Prop :=
 Definition reachable (startn : node) (endn : node) (g : graph) : Prop :=
   exists (p : path), hasPath g p /\ origin p = startn /\ destination p = endn.
 
-(** Pseudocode for the definition of correctness of bfs:
-[bfs] is correct if
-  for all good graphs g, initial frontiers, nodes n1 and n2 in g
-    if [bfs] finds a path, this path is in [g]
-      and the beginning node of this path is in the frontier
-    and
-    if n2 is reachable from n1 and n1 is in the frontier
-      then there exists a path p that bfs finds
-      that starts from n1 and ends in n2
-      and
-      for all paths p' that have same start and end
-        (if p' is in g, then its length is greater or equal to the length of p)
-        and
-        (if p is not equal to p', then bfs does not find p')
-      (a long way of saying "if n2 is reachable from n1 that is in frontier
-       then bfs finds exactly one path from n1 to n2 and that is the shortest")
-    and
-    if n2 is not reachable from n1
-      then for all paths p' that bfs finds
-      if p' starts from n1, it cannot end in n2
-      (a long way of saying "if n2 is not reachable from n1
-       then bfs does not find a path from n1 to n2")
-**)
 
+(** The following section defines the correctness of BFS. **)
+
+(** For every good graph g and starting frontier,
+    if bfs finds path p, then this path exists in g
+    and its origin is one of the nodes in the frontier. **)
 Definition finds_legit_paths : Prop :=
   forall (g : graph), GoodGraph g ->
     forall (frontier : list node) (p : path), In p (bfsAllPaths g frontier) ->
       hasPath g p /\ In (origin p) frontier.
 
+(** For every good graph g and two nodes s and d,
+    if d is not reachable from s in g
+    then there does not exist a way for bfs to find a path from s to d.
+    More specifically, we can say that if we run bfs with some frontier
+    and it finds some path, then if this path starts from s,
+    it cannot possibly end in d. **)
 Definition does_not_find_nonlegit_paths : Prop :=
   forall (g : graph), GoodGraph g ->
     forall (s : node) (d : node), ~(reachable s d g) ->
       forall (frontier : list node) (p : path),
         In p (bfsAllPaths g frontier) -> s = origin p -> d <> destination p.
 
+(** For every good graph g and two nodes s and d,
+    if d is reachable from s in g
+    then if we run bfs with some frontier and get out a path p from s to d
+    then bfs does not find some different path p' from s to d.
+    That is, bfs finds maximum of one path from s to d. **)
 Definition finds_max_one_path_per_pair : Prop :=
   forall (g : graph), GoodGraph g ->
     forall (s : node) (d : node), reachable s d g ->
       forall (frontier : list node) (p : path),
         In p (bfsAllPaths g frontier) -> s = origin p -> d = destination p ->
         forall (p' : path), s = origin p' -> d = destination p' ->
-          ~(In p (bfsAllPaths g frontier)).
+          p <> p' -> ~(In p' (bfsAllPaths g frontier)).
 
+(** For every good graph g and initial frontier and node s,
+    if s is in the frontier
+    then for every node d, if d is reachable from s in g
+    then bfs finds some path p from s to d. **)
+Definition finds_min_one_path_from_frontier_if_reachable : Prop :=
+  forall (g : graph), GoodGraph g ->
+    forall (s : node) (frontier : list node), In s frontier ->
+      forall (d : node), reachable s d g ->
+        exists (p : path), s = origin p /\ d = destination p /\
+          In p (bfsAllPaths g frontier).
+
+(** For every good graph g and two nodes s and d,
+    if d is reachable from s in g
+    then for every initial frontier and path p,
+    if bfs finds p given that frontier and g
+    and the origin of path is s and destination d
+    then every path in g from s to d is longer or same length than p. **)
 Definition finds_the_shortest_path : Prop :=
   forall (g : graph), GoodGraph g ->
     forall (s : node) (d : node), reachable s d g ->
       forall (frontier : list node) (p : path),
         In p (bfsAllPaths g frontier) -> s = origin p -> d = destination p ->
-        forall (p' : path), hasPath g p' -> length p' >= length p.
+        forall (p' : path), hasPath g p' -> s = origin p' -> d = destination p'
+          -> length p' >= length p.
 
+(** In order for bfs to be correct, all of the above conditions must hold. **)
 Definition bfs_correct : Prop :=
-  forall (g : graph), GoodGraph g ->
-  forall (frontier : list node) (n1 : node) (n2 : node),
-    (forall (p : path), In p (bfsAllPaths g frontier) ->
-       hasPath g p /\ In (origin p) frontier)
-    /\
-    (reachable n1 n2 g -> In n1 frontier ->
-      exists (p : path), In p (bfsAllPaths g frontier) /\
-        n1 = origin p /\ n2 = destination p /\
-        (forall (p' : path), n1 = origin p' ->
-           n2 = destination p' ->
-           (hasPath g p' -> length p' >= length p)
-           /\ (p <> p' -> ~(In p (bfsAllPaths g frontier)))))
-    /\
-    (~(reachable n1 n2 g) ->
-      forall (p' : path),
-        In p' (bfsAllPaths g frontier) ->
-        n1 = origin p' -> n2 <> destination p').
+  finds_legit_paths /\ does_not_find_nonlegit_paths /\
+  finds_max_one_path_per_pair /\ finds_min_one_path_from_frontier_if_reachable
+  /\ finds_the_shortest_path.
