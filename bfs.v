@@ -98,22 +98,30 @@ Lemma remove_length : forall g v neighbors frontier g' frontier',
     rewrite H0 in H1. rewrite H1. auto.
 Qed.
 
+Definition notSet (m:parent_t) (k:node) :=
+    if node_in_dec k (map (@fst node node) m) then true else false.
+
 Definition bfs_funcstep (args : graph * list node * parent_t) :
   option (graph * list node * parent_t) :=
   let (args', parent) := args in let (g, frontier) := args' in
   match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
   | None => None
   | Some (v, neighbors, g', frontier') => Some (g', frontier',
-               fold_right (fun u pr => (u,v)::pr) parent neighbors)
+               fold_right (fun u pr => (u,v)::pr) parent
+               (filter (notSet parent) neighbors))
 end.
 
 Function bfs_function' (args : graph * list node * parent_t)
     {measure (fun args => length (fst (fst (args))))} : parent_t :=
-  let oargs := bfs_funcstep args in
   match bfs_funcstep args with
   | None => let (_, parent) := args in parent
   | Some args' => bfs_function' args'
 end.
+unfold bfs_funcstep.
+intros.
+destruct args; destruct p; destruct args'; destruct p.
+subst; simpl in *.
+rewrite (remove_length _ _ _ _ _ _ teq1); auto.
 
 
 
