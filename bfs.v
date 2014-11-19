@@ -1,3 +1,4 @@
+(** vim: set ts=2 sw=2 et : **)
 Require Import Coq.Lists.List.
 Require Import Coq.Init.Datatypes.
 Require Import Coq.Init.Wf.
@@ -69,6 +70,38 @@ Lemma remove_length' : forall g a v neighbors g',
     apply (IHg _ _ _ _ H0).
 Qed.
 
+Functional Scheme lookupEdgesAndRemove_ind := Induction for lookupEdgesAndRemove Sort Prop.
+
+Ltac myinj H := injection H; clear H; intros; subst.
+
+Lemma lookupEdgesAndRemove_node :
+  forall (g:graph) (u v:node) (neighbors:list node) (g':graph),
+  lookupEdgesAndRemove g u = Some (v, neighbors, g') -> u = v.
+  intros until u.
+  functional induction (lookupEdgesAndRemove g u).
+  - intros. inversion H.
+  - intros. myinj H. simpl in *; auto.
+  - intros. myinj H. eapply IHo. apply e1.
+  - intros. inversion H.
+Qed.
+
+Lemma lookupEdgesAndRemove_edges_exist :
+  forall (g:graph) (u:node) (neighbors:list node) (g':graph),
+  lookupEdgesAndRemove g u = Some (u, neighbors, g') ->
+  forall v, In v neighbors -> hasEdge g u v.
+  intros until u.
+  functional induction (lookupEdgesAndRemove g u).
+  - intros. inversion H.
+  - intros. clear e0. injection H; clear H; intros.
+    destruct x. simpl in *. myinj H1.
+    unfold hasEdge. exists neighbors. simpl. split.
+    + left; auto.
+    + auto.
+  - intros. myinj H.
+    unfold hasEdge.
+    destruct (node_eq_dec v (fst x)); subst.
+Abort.
+
 (** [firstForWhichSomeAndTail] computes the following two expressions (or [None] if [head] fails):
     -  [fromMybe (head (dropWhile isNone (map f xs)))]
     -  [tail (dropWhile (isNone . f) xs)]
@@ -101,14 +134,16 @@ Qed.
 Definition notSet (m:parent_t) (k:node) :=
     if node_in_dec k (map (@fst node node) m) then true else false.
 
+Definition addToParent v neighbors parent :=
+  fold_right (fun u pr => (u,v)::pr) parent (filter (notSet parent) neighbors).
+
 Definition bfs_step (args : graph * list node * parent_t) :
   option (graph * list node * parent_t) :=
   let (args', parent) := args in let (g, frontier) := args' in
   match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
   | None => None
-  | Some (v, neighbors, g', frontier') => Some (g', frontier',
-               fold_right (fun u pr => (u,v)::pr) parent
-               (filter (notSet parent) neighbors))
+  | Some (v, neighbors, g', frontier') => 
+          Some (g', frontier', addToParent v neighbors parent)
 end.
 
 Function bfs (args : graph * list node * parent_t)
@@ -128,25 +163,50 @@ injection teq; clear teq; intros; subst.
 rewrite (remove_length _ _ _ _ _ _ (eq_sym Heqtup)); auto.
 Defined.
 
+Lemma bfs_parent_addonly :
+  forall (g:graph) (frontier:list node) parent,
+  forall args, args = (g,frontier, parent) ->
+  forall ret, ret = bfs args ->
+  forall u v, In (v, u) parent -> In (v, u) ret.
+  intros until args. revert g frontier parent.
+  functional induction (bfs args). {
+    intros; destruct _x; myinj H. (* TODO: automate *)
+    assumption.
+  } {
+    intros; subst.
+    (* TODO: automate the following steps *)
+    unfold bfs_step in e.
+    remember ((firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier)) as stepOut.
+    destruct stepOut. 
+      Focus 2. inversion e.
+    destruct p; destruct p; destruct a. myinj e.
+    (* automate up to here *)
+    eapply IHp; clear IHp; try reflexivity.
+    assert (In (v, u) parent -> In (v, u) (addToParent n l0 parent)) by admit; auto.
+  }
+Qed.
 
-(* WTH, bfs_ind already exists now?? *)
-Check bfs_ind. (* maybe this is what we want *)
-
-Definition bfs_ind : forall (P : parent_t -> Prop),
-  (forall args, 
-      match bfs_step args with
-      | None => P (snd args)
-      | Some args' => P (bfs args')
-      end
-  )
-  ->
-  (forall args,
-    P ( match bfs_step args with
-      | None => let (_, parent) := args in parent
-      | Some args' => bfs args'
-      end
-    ) )
-  -> forall args, P (bfs args).
+Lemma bfs_no_alien_edges :
+  forall (g0 g:graph) (frontier:list node) parent,
+  forall args, args = (g,frontier, parent) ->
+  forall ret, ret = bfs args ->
+  forall u v, (In (v, u) parent -> hasEdge g0 u v) ->
+              (In (v, u) ret    -> hasEdge g0 u v).
+  intros until args. revert g frontier parent.
+  functional induction (bfs args). {
+    intros; destruct _x; myinj H; auto.
+  } {
+    intros; subst.
+    (* TODO: automate something from here *)
+    unfold bfs_step in e.
+    remember ((firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier)) as stepOut.
+    destruct stepOut. 
+      Focus 2. inversion e.
+    destruct p; destruct p; destruct a. myinj e.
+    (* to here? *)
+    eapply IHp; clear IHp; intros; try solve [reflexivity|auto].
+    unfold firstForWhichSomeAndTail in *.
+Abort.
 
 Lemma bfs_graph_destruction' :
     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
@@ -242,58 +302,24 @@ Definition finds_legit_paths : Prop :=
     forall (frontier : list node) (p : path), In p (bfsAllPaths g frontier) ->
       hasPath g p /\ In (origin p) frontier.
 
-(** For every good graph g and two nodes s and d,
-    if d is not reachable from s in g
-    then there does not exist a way for bfs to find a path from s to d.
-    More specifically, we can say that if we run bfs with some frontier
-    and it finds some path, then if this path starts from s,
-    it cannot possibly end in d. **)
-Definition does_not_find_nonlegit_paths : Prop :=
-  forall (g : graph), GoodGraph g ->
-    forall (s : node) (d : node), ~(reachable s d g) ->
-      forall (frontier : list node) (p : path),
-        In p (bfsAllPaths g frontier) -> s = origin p -> d <> destination p.
-
-(** For every good graph g and two nodes s and d,
-    if d is reachable from s in g
-    then if we run bfs with some frontier and get out a path p from s to d
-    then bfs does not find some different path p' from s to d.
-    That is, bfs finds maximum of one path from s to d. **)
-Definition finds_max_one_path_per_pair : Prop :=
-  forall (g : graph), GoodGraph g ->
-    forall (s : node) (d : node), reachable s d g ->
-      forall (frontier : list node) (p : path),
-        In p (bfsAllPaths g frontier) -> s = origin p -> d = destination p ->
-        forall (p' : path), s = origin p' -> d = destination p' ->
-          p <> p' -> ~(In p' (bfsAllPaths g frontier)).
-
 (** For every good graph g and initial frontier and node s,
     if s is in the frontier
     then for every node d, if d is reachable from s in g
     then bfs finds some path p from s to d. **)
-Definition finds_min_one_path_from_frontier_if_reachable : Prop :=
+Definition finds_path_from_frontier_if_reachable : Prop :=
   forall (g : graph), GoodGraph g ->
-    forall (s : node) (frontier : list node), In s frontier ->
+    exists (s : node) (frontier : list node), In s frontier ->
       forall (d : node), reachable s d g ->
-        exists (p : path), s = origin p /\ d = destination p /\
-          In p (bfsAllPaths g frontier).
+        forall (p : path), p = traceParent (bfs (g, frontier, [])) d ->
+          s = origin p /\ d = destination p.
 
-(** For every good graph g and two nodes s and d,
-    if d is reachable from s in g
-    then for every initial frontier and path p,
-    if bfs finds p given that frontier and g
-    and the origin of path is s and destination d
-    then every path in g from s to d is longer or same length than p. **)
 Definition finds_the_shortest_path : Prop :=
   forall (g : graph), GoodGraph g ->
-    forall (s : node) (d : node), reachable s d g ->
-      forall (frontier : list node) (p : path),
-        In p (bfsAllPaths g frontier) -> s = origin p -> d = destination p ->
-        forall (p' : path), hasPath g p' -> s = origin p' -> d = destination p'
-          -> length p' >= length p.
+    forall (frontier : list node),
+      forall (d : node) (p:path), p = traceParent (bfs (g, frontier, [])) d ->
+        forall (p':path), In (origin p') frontier -> (destination p') = d ->
+          length p <= length p'.
 
 (** In order for bfs to be correct, all of the above conditions must hold. **)
 Definition bfs_correct : Prop :=
-  finds_legit_paths /\ does_not_find_nonlegit_paths /\
-  finds_max_one_path_per_pair /\ finds_min_one_path_from_frontier_if_reachable
-  /\ finds_the_shortest_path.
+  finds_legit_paths /\ finds_path_from_frontier_if_reachable  /\ finds_the_shortest_path.
