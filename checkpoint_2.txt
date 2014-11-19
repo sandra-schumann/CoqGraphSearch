@@ -34,11 +34,21 @@ work.
 We reworked the definition of correctness of BFS. It is now broken up into
 several smaller lemmas that can be proven separately. In addition it fixes bugs
 with the previous definition. For each lemma, we stated a loop invariant which
-we will try to use to prove it and a (probably incomplete) list of helper
-lemmas. The loop invariants for the major goals look like the following:
+we will try to use to prove it (if applicable) and a (probably incomplete) list
+of helper lemmas. The general strategies for the major goals look like the
+following:
 
 - `finds_legit_paths`: the parent array represents only paths that exist in the
   graph and start from a frontier node
+- `finds_the_shortest_path`: for all nodes, if there exists a path from the node
+  to one of the frontier nodes shorter than the path that would currently be
+  created, then the parent array contains it. Note that the base case is trivial,
+  since nothing shorter than length 0 exists.
+- Proving that BFS finds paths to all reachable nodes is currently our weakest
+  point. The general argiment we have is "if there is an edge from a node that
+  bfs finds (for example, the start node)", to another node (so it is
+  reachable), then bfs at the start node of that edge will find the following
+  node.
 
 When the technical issues (induction, Qed vs Defined) were worked out, we got
 started proving the things we knew we would need anyway that we weren't able to
