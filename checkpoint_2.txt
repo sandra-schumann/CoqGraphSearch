@@ -35,7 +35,10 @@ We reworked the definition of correctness of BFS. It is now broken up into
 several smaller lemmas that can be proven separately. In addition it fixes bugs
 with the previous definition. For each lemma, we stated a loop invariant which
 we will try to use to prove it and a (probably incomplete) list of helper
-lemmas.
+lemmas. The loop invariants for the major goals look like the following:
+
+- `finds_legit_paths`: the parent array represents only paths that exist in the
+  graph and start from a frontier node
 
 When the technical issues (induction, Qed vs Defined) were worked out, we got
 started proving the things we knew we would need anyway that we weren't able to
