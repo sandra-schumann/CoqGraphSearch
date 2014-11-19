@@ -31,10 +31,11 @@ we did not commit after every small change, but it seems that refactoring the
 right amount of one iteration into a separate function made functional induction
 work.
 
-We reworked the definition of correcntess of BFS. It is now more digestible, and
-has less bugs (the previous one had a unsatisfiable case).
-
-Loop invariants?
+We reworked the definition of correctness of BFS. It is now broken up into
+several smaller lemmas that can be proven separately. In addition it fixes bugs
+with the previous definition. For each lemma, we stated a loop invariant which
+we will try to use to prove it and a (probably incomplete) list of helper
+lemmas.
 
 When the technical issues (induction, Qed vs Defined) were worked out, we got
 started proving the things we knew we would need anyway that we weren't able to
