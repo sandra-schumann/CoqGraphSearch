@@ -82,21 +82,25 @@ Ltac mysimp := intros;
     | [ H : (_, _) = (_, _) |- _ ] => myinj H
     | [ H : context[(fst ?x, snd ?x)] |- _ ] => destruct x
     | [ H : ?x <> ?x |- _ ] => destruct H
-    | [ H : ?x = (fst ?x, _) |- _ ] => destruct x
-    | [ H : ?x = (_, snd ?x) |- _ ] => destruct x
+    | [ H : ?x = (_, _) |- _ ] => destruct x
   end.
 
 Ltac pve :=
   match goal with 
+    | [ H : _ |- _ ] => assumption
+    | [ H : False |- _ ] => destruct H
+    | [ H : ?P, H' : ~?P |- _ ] => destruct (H' H)
     | [ H : context[node_eq_dec ?x ?y] |- _ ] => destruct (node_eq_dec x y); repeat (mysimp; simpl in *; subst; eauto)
     | [ H : ?A |- ?A /\ _  ] => split; [apply A|]
-    | [ H : ?A |- _  /\ ?A ] => split; [apply A|]
+    | [ H : ?A |- _  /\ ?A ] => split; [|apply A]
     | [ H : ?A |- ?A \/  _ ] => left; apply A
     | [ H : ?A |-  _ \/ ?A ] => right; apply A
+    | [ H : context[let (_, _) := ?x in _] |- _ ] => destruct x
+    (*| [ H : (match ?x with _ => Some _ | _ => None end = Some _) |- _ ] => destruct x*)
     | _ => try mysimp; eauto
   end.
 
-Ltac pv := repeat (simpl in *; pve).
+Ltac pv := repeat (intros; simpl in *; pve).
 
 Lemma lookupEdgesAndRemove_node :
   forall (g:graph) (u v:node) (neighbors:list node) (g':graph),
@@ -115,14 +119,50 @@ Lemma lookupEdgesAndRemove_hasEdge :
   - unfold hasEdge; pv. elim (IHo _ _ e1 v0); pv.
 Qed.
 
+Lemma in_nodes : forall u vs g,  In (u, vs) g -> In u (nodes g).
+Admitted.
+
+Lemma lookupEdgesAndRemove_subgraph:
+  forall (g:graph), NoDup (nodes g) ->
+  forall (g':graph) (neighbors:list node),
+  forall u, lookupEdgesAndRemove g u = Some (u, neighbors, g') ->
+  exists gBefore gAfter, g = gBefore ++ [(u,neighbors)] ++ gAfter /\ g' = gBefore++gAfter.
+Admitted.
+
+Lemma lookupEdgesAndRemove_NoDup:
+  forall (g:graph), NoDup (nodes g) ->
+  forall (g':graph) (neighbors:list node),
+  forall u, lookupEdgesAndRemove g u = Some (u, neighbors, g') -> NoDup g'.
+Admitted.
+
 Lemma hasEdge_lookupEdgesAndRemove:
-  forall (g:graph), GoodGraph g ->
+  forall (g:graph), NoDup (nodes g) ->
   forall (u v:node), hasEdge g u v ->
   forall (neighbors:list node) (g':graph),
   lookupEdgesAndRemove g u = Some (u, neighbors, g') -> In v neighbors.
-  intros until u.
-  functional induction (lookupEdgesAndRemove g u); pv.
-Abort.
+  induction g; [pv|].
+  intros.
+  assert (NoDup (nodes g)) by (
+    replace (NoDup (nodes g)) with (NoDup ([]++nodes g)) by auto;
+    eapply NoDup_remove_1; pv).
+  simpl in H1. destruct (node_eq_dec (fst a) u). {
+    pv. elim H0; clear H0; intros.
+    destruct H0; destruct H0; [pv|].
+    specialize (NoDup_remove_2 [] _ u H).
+    specialize (in_nodes _ _ _ H0); pv.
+  } {
+    eapply IHg; clear IHg.
+    - assumption.
+    - elim H0; intros. destruct (lookupEdgesAndRemove g u); pv.
+      destruct a; pv; simpl in *. destruct H3; pv.
+      unfold hasEdge. exists x. apply (conj H1 H4).
+    - destruct (lookupEdgesAndRemove g u); pv. repeat apply f_equal.
+      (* FIXME: why does this not work??
+      instantiate (1:=g0); reflexivity.
+      *)
+      instantiate (1:=nil); admit.
+  }
+Qed.
 
 (** [firstForWhichSomeAndTail] computes the following two expressions (or [None] if [head] fails):
     -  [fromMybe (head (dropWhile isNone (map f xs)))]
