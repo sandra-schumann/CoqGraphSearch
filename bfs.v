@@ -72,34 +72,56 @@ Qed.
 
 Functional Scheme lookupEdgesAndRemove_ind := Induction for lookupEdgesAndRemove Sort Prop.
 
-Ltac myinj H := injection H; clear H; intros; subst.
+Ltac myinj H := injection H; clear H; intros; try subst.
+
+Ltac mysimp := intros;
+  match goal with 
+    | [ H : _ /\ _ |- _ ] => destruct H
+    | [ H : None = Some _ |- _ ] => inversion H ; clear H ; subst
+    | [ H : Some _ = Some _ |- _ ] => myinj H
+    | [ H : (_, _) = (_, _) |- _ ] => myinj H
+    | [ H : context[(fst ?x, snd ?x)] |- _ ] => destruct x
+    | [ H : ?x <> ?x |- _ ] => destruct H
+    | [ H : ?x = (fst ?x, _) |- _ ] => destruct x
+    | [ H : ?x = (_, snd ?x) |- _ ] => destruct x
+  end.
+
+Ltac pve :=
+  match goal with 
+    | [ H : context[node_eq_dec ?x ?y] |- _ ] => destruct (node_eq_dec x y); repeat (mysimp; simpl in *; subst; eauto)
+    | [ H : ?A |- ?A /\ _  ] => split; [apply A|]
+    | [ H : ?A |- _  /\ ?A ] => split; [apply A|]
+    | [ H : ?A |- ?A \/  _ ] => left; apply A
+    | [ H : ?A |-  _ \/ ?A ] => right; apply A
+    | _ => try mysimp; eauto
+  end.
+
+Ltac pv := repeat (simpl in *; pve).
 
 Lemma lookupEdgesAndRemove_node :
   forall (g:graph) (u v:node) (neighbors:list node) (g':graph),
   lookupEdgesAndRemove g u = Some (v, neighbors, g') -> u = v.
   intros until u.
-  functional induction (lookupEdgesAndRemove g u).
-  - intros. inversion H.
-  - intros. myinj H. simpl in *; auto.
-  - intros. myinj H. eapply IHo. apply e1.
-  - intros. inversion H.
+  functional induction (lookupEdgesAndRemove g u); pv.
 Qed.
 
-Lemma lookupEdgesAndRemove_edges_exist :
+Lemma lookupEdgesAndRemove_hasEdge :
   forall (g:graph) (u:node) (neighbors:list node) (g':graph),
   lookupEdgesAndRemove g u = Some (u, neighbors, g') ->
   forall v, In v neighbors -> hasEdge g u v.
   intros until u.
-  functional induction (lookupEdgesAndRemove g u).
-  - intros. inversion H.
-  - intros. clear e0. injection H; clear H; intros.
-    destruct x. simpl in *. myinj H1.
-    unfold hasEdge. exists neighbors. simpl. split.
-    + left; auto.
-    + auto.
-  - intros. myinj H.
-    unfold hasEdge.
-    destruct (node_eq_dec v (fst x)); subst.
+  functional induction (lookupEdgesAndRemove g u); pv.
+  - unfold hasEdge; exists neighbors. pv.
+  - unfold hasEdge; pv. elim (IHo _ _ e1 v0); pv.
+Qed.
+
+Lemma hasEdge_lookupEdgesAndRemove:
+  forall (g:graph), GoodGraph g ->
+  forall (u v:node), hasEdge g u v ->
+  forall (neighbors:list node) (g':graph),
+  lookupEdgesAndRemove g u = Some (u, neighbors, g') -> In v neighbors.
+  intros until u.
+  functional induction (lookupEdgesAndRemove g u); pv.
 Abort.
 
 (** [firstForWhichSomeAndTail] computes the following two expressions (or [None] if [head] fails):
