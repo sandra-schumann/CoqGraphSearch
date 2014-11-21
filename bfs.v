@@ -78,6 +78,7 @@ Ltac mysimp := intros;
   match goal with 
     | [ H : _ /\ _ |- _ ] => destruct H
     | [ H : None = Some _ |- _ ] => inversion H ; clear H ; subst
+    | [ H : Some _ = None |- _ ] => inversion H ; clear H ; subst
     | [ H : Some _ = Some _ |- _ ] => myinj H
     | [ H : (_, _) = (_, _) |- _ ] => myinj H
     | [ H : context[(fst ?x, snd ?x)] |- _ ] => destruct x
@@ -138,7 +139,7 @@ Lemma in_nodes : forall u vs g,  In (u, vs) g -> In u (nodes g).
 Qed.
 
 Lemma lookupEdgesAndRemove_subgraph':
-  forall (g:graph), NoDup (nodes g) ->
+  forall (g:graph),
   forall u ret, lookupEdgesAndRemove g u = ret ->
   forall (g':graph) (neighbors:list node), ret = Some (u, neighbors, g') ->
   exists gBefore gAfter, g' = gBefore++gAfter /\ g = gBefore ++ [(u,neighbors)] ++ gAfter.
@@ -147,27 +148,44 @@ Lemma lookupEdgesAndRemove_subgraph':
   pv; subst; pv.
   - exists [], g'; pv.
   - destruct (lookupEdgesAndRemove g u); pv.
-    assert (NoDup (nodes g)) as Hn by (
-      replace (NoDup (nodes g)) with (NoDup ([]++nodes g)) by auto;
-      eapply NoDup_remove_1; pv);
-      elim (IHg Hn (Some (u,neighbors,g0)) eq_refl _ _ eq_refl); clear Hn IHg.
-    intros x H0. destruct H0. destruct H0.
+      elim (IHg (Some (u,neighbors,g0)) eq_refl _ _ eq_refl); clear IHg.
+    intros x H0. destruct H0. destruct H.
     exists (a::x), x0; subst; split; pv.
 Qed.
 
 Lemma lookupEdgesAndRemove_subgraph:
-  forall (g:graph), NoDup (nodes g) ->
+  forall (g:graph),
   forall (g':graph) (neighbors:list node),
   forall u, lookupEdgesAndRemove g u = Some (u, neighbors, g') ->
   exists gBefore gAfter, g' = gBefore++gAfter /\ g = gBefore ++ [(u,neighbors)] ++ gAfter.
-  intros; elim (lookupEdgesAndRemove_subgraph' g H u (lookupEdgesAndRemove g u) eq_refl g' neighbors H0); pv.
+  intros; elim (lookupEdgesAndRemove_subgraph' g u (lookupEdgesAndRemove g u) eq_refl g' neighbors H); pv.
+Qed.
+
+Lemma lookupEdgesAndRemove_subgraph_hasEdge:
+  forall (g:graph),
+  forall (g':graph) (neighbors:list node),
+  forall n, lookupEdgesAndRemove g n = Some (n, neighbors, g') ->
+  (forall u v, hasEdge g' u v -> hasEdge g u v).
+  intros.
+  elim (lookupEdgesAndRemove_subgraph _ _ _ _ H); pv.
+  elim H1; clear H1; intros.
+  unfold hasEdge in *.
+  elim H0; clear H0; intros.
+  econstructor; split.
+  destruct H1.
+  subst.
+  destruct H0.
+  specialize (in_app_or _ _ _ H0); intros.
+  apply in_or_app.
+  destruct H2; [left|right;right]; eauto.
+  destruct H0; pv.
 Qed.
 
 Lemma lookupEdgesAndRemove_NoDup:
   forall (g:graph), NoDup (nodes g) ->
   forall (g':graph) (neighbors:list node),
   forall u, lookupEdgesAndRemove g u = Some (u, neighbors, g') -> NoDup (nodes g').
-  intros. elim (lookupEdgesAndRemove_subgraph g H g' neighbors u H0). intros.
+  intros. elim (lookupEdgesAndRemove_subgraph g g' neighbors u H0). intros.
   elim H1; clear H1; intros; destruct H1.
   specialize (NoDup_remove_1 (nodes x) (nodes x0) u); intro Hd; subst.
   replace (nodes (x ++ x0)) with (nodes x ++ nodes x0) by (symmetry; apply map_app).
@@ -311,29 +329,46 @@ Lemma bfs_parent_addonly :
   }
 Qed.
 
+Lemma addToParent_hasEdge:
+  forall g n vs parent0,
+  (forall v, In v vs -> hasEdge g n v) ->
+  (forall u v, In (v, u) parent0 -> hasEdge g u v) ->
+  (forall u v, In (v, u) (addToParent n vs parent0) -> hasEdge g u v).
+  intros until vs. revert g n.
+  induction vs; pv.
+  unfold addToParent in *; simpl in *.
+  destruct (notSet parent0 a); pv.
+  destruct H1; pv.
+Qed.
+
 Lemma bfs_no_alien_edges :
   forall (g0 g:graph) (frontier:list node) parent,
-  forall args, args = (g,frontier, parent) ->
-  forall ret, ret = bfs args ->
-  forall u v, (In (v, u) parent -> hasEdge g0 u v) ->
-              (In (v, u) ret    -> hasEdge g0 u v).
-  intros until args. revert g frontier parent.
-  functional induction (bfs args). {
-    intros; destruct _x; myinj H; auto.
-  } {
-    intros; subst.
-    (* TODO: automate something from here *)
-    unfold bfs_step in e.
-    remember ((firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier)) as stepOut.
-    destruct stepOut. 
-      Focus 2. inversion e.
-    destruct p; destruct p; destruct a. myinj e.
-    (* to here? *)
-    eapply IHp; clear IHp; intros; try solve [reflexivity|auto].
-    symmetry in HeqstepOut.
-    elim (firstForWhichSomeAndTail_corr _ _ _ _ HeqstepOut); intros.
-    elim H0; clear H0; intros; repeat mysimp; subst.
-    Check (lookupEdgesAndRemove_hasEdge _ _ _ _ _ H3).
+  (forall u v, hasEdge g u v -> hasEdge g0 u v) ->
+  (forall u v, In (v, u)                      parent -> hasEdge g0 u v) ->
+  (forall u v, In (v, u) (bfs (g, frontier, parent)) -> hasEdge g0 u v).
+  intros until parent.
+  remember (g, frontier, parent) as args.
+  replace parent with (snd args) in * by pv.
+  replace frontier with (snd (fst args)) in * by pv.
+  replace g with (fst (fst args)) in * by pv.
+  clear parent frontier g Heqargs.
+  functional induction (bfs args); pv.
+  unfold bfs_step in *; pv.
+  remember (firstForWhichSomeAndTail (lookupEdgesAndRemove g) l) as T.
+  symmetry in HeqT; destruct T; pv.
+  rename g1 into g'.
+  rename l into frontier.
+  rename l0 into frontier'.
+  rename l1 into neighbors.
+  rename p0 into parent.
+  elim (firstForWhichSomeAndTail_corr _ _ _ _ HeqT); pv; subst; pv.
+  elim H2; clear H2; pv; subst; pv.
+  specialize (lookupEdgesAndRemove_node _ _ _ _ _ H3); intro Hnode; subst.
+  eapply IHp.
+  - specialize lookupEdgesAndRemove_subgraph_hasEdge; pv.
+  - specialize (lookupEdgesAndRemove_hasEdge _ _ _ _ _ H3); intro Hnew.
+    specialize addToParent_hasEdge; pv.
+  - assumption.
 Qed.
 
 Lemma bfs_graph_destruction' :
