@@ -112,7 +112,7 @@ Lemma lookupEdgesAndRemove_node :
   functional induction (lookupEdgesAndRemove g u); pv.
 Qed.
 
-Lemma lookupEdgesAndRemove_hasEdge :
+Lemma lookupEdgesAndRemove_hasEdge' :
   forall (g:graph) (u:node) (neighbors:list node) (g':graph),
   lookupEdgesAndRemove g u = Some (u, neighbors, g') ->
   forall v, In v neighbors -> hasEdge g u v.
@@ -120,6 +120,16 @@ Lemma lookupEdgesAndRemove_hasEdge :
   functional induction (lookupEdgesAndRemove g u); pv.
   - unfold hasEdge; exists neighbors. pv.
   - unfold hasEdge; pv. elim (IHo _ _ e1 v0); pv.
+Qed.
+
+Lemma lookupEdgesAndRemove_hasEdge :
+  forall (g:graph) (u u':node) (neighbors:list node) (g':graph),
+  lookupEdgesAndRemove g u = Some (u', neighbors, g') ->
+  forall v, In v neighbors -> hasEdge g u v.
+  intros.
+  replace u' with u in *.
+  apply (lookupEdgesAndRemove_hasEdge' _ _ _ _ H _ H0).
+  apply (lookupEdgesAndRemove_node _ _ _ _ _ H).
 Qed.
 
 Lemma in_nodes : forall u vs g,  In (u, vs) g -> In u (nodes g).
@@ -224,6 +234,28 @@ Lemma remove_length : forall g v neighbors frontier g' frontier',
     rewrite H0 in H1. rewrite H1. auto.
 Qed.
 
+Lemma firstForWhichSomeAndTail_corr :
+  forall {A B:Type} (f:A->option B) (xs xs':list A) (y:B),
+  firstForWhichSomeAndTail f xs = Some (y, xs') ->
+  exists x prefix,
+    (forall x', In x' prefix -> f(x')=None)
+    /\
+    f(x)=Some y
+    /\
+    xs = prefix ++ [x] ++ xs'.
+  intros until xs.
+  induction xs; [pv|]; intros.
+  remember (f a) as t.
+  destruct t; intros; simpl in *; rewrite <- Heqt in H.
+  - exists a, []. split; [|split]; pv.
+  - elim (IHxs xs' y); clear IHxs; intros; subst.
+    elim H0; clear H0; intros; subst. exists x, (a::x0).
+    destruct H0; destruct H1. split; [|split]; pv.
+    + destruct H3; subst; pv.
+    + subst; pv.
+    + pv.
+Qed.
+
 Definition notSet (m:parent_t) (k:node) :=
     if node_in_dec k (map (@fst node node) m) then true else false.
 
@@ -298,8 +330,11 @@ Lemma bfs_no_alien_edges :
     destruct p; destruct p; destruct a. myinj e.
     (* to here? *)
     eapply IHp; clear IHp; intros; try solve [reflexivity|auto].
-    unfold firstForWhichSomeAndTail in *.
-Abort.
+    symmetry in HeqstepOut.
+    elim (firstForWhichSomeAndTail_corr _ _ _ _ HeqstepOut); intros.
+    elim H0; clear H0; intros; repeat mysimp; subst.
+    Check (lookupEdgesAndRemove_hasEdge _ _ _ _ _ H3).
+Qed.
 
 Lemma bfs_graph_destruction' :
     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
