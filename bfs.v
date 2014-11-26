@@ -275,12 +275,14 @@ Lemma firstForWhichSomeAndTail_corr :
     + pv.
 Qed.
 
-(* Shouldn't this be set instead of notSet? *)
 Definition notSet (m:parent_t) (k:node) :=
-    if node_in_dec k (map (@fst node node) m) then true else false.
+    if node_in_dec k (map (@fst node node) m) then false else true.
 
 Definition addToParent v neighbors parent :=
   fold_right (fun u pr => (u,v)::pr) parent (filter (notSet parent) neighbors).
+
+Example Ex_addToParent_1 : addToParent (Node 1) [Node 2; Node 3] [(Node 2, Node 0)]
+  = [(Node 3, Node 1); (Node 2, Node 0)]. reflexivity. Qed.
 
 Definition bfs_step (args : graph * list node * parent_t) :
   option (graph * list node * parent_t) :=
@@ -288,7 +290,9 @@ Definition bfs_step (args : graph * list node * parent_t) :
   match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
   | None => None
   | Some (v, neighbors, g', frontier') => 
-          Some (g', frontier', addToParent v neighbors parent)
+          Some (g',
+                filter (notSet parent) neighbors++frontier',
+                addToParent v neighbors parent)
 end.
 
 Function bfs (args : graph * list node * parent_t)
@@ -307,6 +311,26 @@ destruct p; destruct p; destruct a.
 injection teq; clear teq; intros; subst.
 rewrite (remove_length _ _ _ _ _ _ (eq_sym Heqtup)); auto.
 Defined.
+
+Eval compute in ( (* CLRS 3rd edition BFS example *)
+  let r := Node 0 in
+  let s := Node 1 in
+  let t := Node 2 in
+  let u := Node 3 in
+  let v := Node 4 in
+  let w := Node 5 in
+  let x := Node 6 in
+  let y := Node 7 in
+  let g :=
+  [ (v, [r])
+  ; (r, [v; s])
+  ; (s, [r; w])
+  ; (w, [s; t; x])
+  ; (t, [u; x; w])
+  ; (x, [w; t; u; y])
+  ; (y, [x; u])
+  ] in
+  bfs (g, [s], [])).
 
 Lemma bfs_parent_addonly :
   forall (g:graph) (frontier:list node) parent,
