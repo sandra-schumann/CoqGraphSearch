@@ -286,18 +286,6 @@ Definition bfsPushFilter g parent neighbors :=
       filter (fun v => negb (hasParent parent v)) (
         filter (fun v => node_in_decb v (nodes g)) neighbors ).
 
-Definition bfsPushFilter_no_aliens : forall g parent neighbors,
-  forall v, In v (bfsPushFilter g parent neighbors) -> In v neighbors.
-Admitted.
-
-Definition bfsPushFilter_filters_graph : forall g parent neighbors,
-  forall v, In v (bfsPushFilter g parent neighbors) -> In v (nodes g).
-Admitted.
-
-Definition bfsPushFilter_filters_parent : forall g parent neighbors,
-  forall v u, In v (bfsPushFilter g parent neighbors) -> ~In (v,u) parent.
-Admitted.
-
 Definition bfs_step (args : graph * list node * parent_t) :
   option (graph * list node * parent_t) :=
   let (args', parent) := args in let (g, frontier) := args' in
@@ -421,18 +409,6 @@ Lemma bfs_no_alien_edges :
   - assumption.
 Qed.
 
-Lemma bfs_graph_destruction' :
-    forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
- bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
-  forall a, In a g1 -> In a g0.
-Abort.
-
-Lemma bfs_graph_destruction : forall (g:graph),
-     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
-  bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
-  (forall a, In a g0 -> In a g) -> (forall a, In a g1 -> In a g).
-Abort.
-
 (** A path is essentially a list of nodes representing a series of edges
     leading from one node (the origin) to another (the destination).
     The part of the path leading up to the destination (meaning all of
@@ -467,39 +443,10 @@ end.
 Definition traceParent (parent:parent_t) (u:node) := (u, traceParent' parent u).
 Definition bfsAllPaths g s := let parent := bfs (g, s, []) in map (fun p => traceParent parent (fst p)) parent. 
 
-(* s : after done : after none : ? *)
-Lemma bfs_parent_unchanged_after_done :
-     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
-  bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
-  forall v, lookupEdgesAndRemove g0 v = None ->
-  traceParent parent0 v = traceParent parent1 v.
-Abort.
-
-Lemma bfs_parent_new_edges_valid :
-     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
-  bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
-  forall edge, ~ In edge parent0 -> In edge parent1 ->
-  hasEdge g0 (fst edge) (snd edge).
-Abort.
-
-Lemma bfs_parent_all_edges_valid : forall g,
-     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
-  bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
-  (forall e, In e parent0 -> hasEdge g (fst e) (snd e)) ->
-  (forall e, In e parent1 -> hasEdge g (fst e) (snd e)).
-Abort.
-
 (** hasPath indicates that a path p is a valid path in a graph g **)
 Inductive hasPath : graph -> path -> Prop :=
 | IdPath : forall g n, In n (nodes g) -> hasPath g (n, [])
 | ConsPath : forall g n n' r', hasEdge g n n' -> hasPath g (n, r') -> hasPath g (n', n::r').
-
-Lemma bfs_parent_all_paths_valid : forall g,
-     forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
-  bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
-  (forall v, hasPath g (traceParent parent0 v)) -> 
-  (forall v, hasPath g (traceParent parent1 v)).
-Abort.
 
 (** node endn is reachable from node startn if there exists a path from
     startn to endn in a graph g **)
@@ -515,9 +462,6 @@ Definition finds_legit_paths : Prop :=
   forall (g : graph), GoodGraph g ->
     forall (frontier : list node) (p : path), In p (bfsAllPaths g frontier) ->
       hasPath g p /\ In (origin p) frontier.
-
-Lemma finds_legit_paths_proof : finds_legit_paths.
-Admitted.
 
 (* idea from stackoverflow *)
 Theorem strong_induction_on_nats' :
