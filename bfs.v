@@ -7,6 +7,7 @@ Require Import Coq.Arith.Lt.
 Require Import Coq.Arith.Le.
 Require Import Recdef.
 Require Import Coq.Arith.Peano_dec.
+Require Import Coq.Arith.Compare_dec.
 Import ListNotations.
 
 (** Defining a way of representing a graph. First we define a node, which will
@@ -274,6 +275,7 @@ Lemma firstForWhichSomeAndTail_corr :
     + pv.
 Qed.
 
+(* Shouldn't this be set instead of notSet? *)
 Definition notSet (m:parent_t) (k:node) :=
     if node_in_dec k (map (@fst node node) m) then true else false.
 
@@ -417,6 +419,7 @@ end.
 Definition traceParent (parent:parent_t) (u:node) := (u, traceParent' parent u).
 Definition bfsAllPaths g s := let parent := bfs (g, s, []) in map (fun p => traceParent parent (fst p)) parent. 
 
+(* s : after done : after none : ? *)
 Lemma bfs_parent_unchanged_after_done :
      forall g0  frontier0  parent0,  forall g1  frontier1  parent1,
   bfs_step (g0, frontier0, parent0) = Some (g1, frontier1, parent1) ->
@@ -464,6 +467,98 @@ Definition finds_legit_paths : Prop :=
   forall (g : graph), GoodGraph g ->
     forall (frontier : list node) (p : path), In p (bfsAllPaths g frontier) ->
       hasPath g p /\ In (origin p) frontier.
+
+Lemma finds_legit_paths_proof : finds_legit_paths.
+Admitted.
+
+(* idea from stackoverflow *)
+Theorem strong_induction_on_nats' :
+  forall (P : nat -> Prop),
+    (forall (n : nat), (forall (k : nat), k < n -> P k) -> P n) ->
+      forall (n : nat), P n /\ (forall (k : nat), k < n -> P k).
+Proof.
+  intros P H n. induction n.
+  - split; try (eapply H); intros k H0; inversion H0.
+  - destruct IHn as [IHn1 IHn2].
+    
+    Lemma strong_ind_step :
+      forall (P : nat -> Prop) (n : nat), P n ->
+      (forall k : nat, k < n -> P k) ->
+      (forall k : nat, k < S n -> P k).
+    Proof.
+      intros P n Hn Hk k H0. destruct (lt_eq_lt_dec k n). destruct s.
+      - apply Hk. apply l.
+      - rewrite e. eauto.
+      - remember (lt_n_Sm_le _ _ H0) as H1.
+        remember (lt_not_le n k l H1) as H2. inversion H2.
+    Qed.
+    
+    remember (strong_ind_step _ _ IHn1 IHn2) as IHn3.
+    split. eapply H. apply IHn3. apply IHn3.
+Qed.
+
+Theorem strong_induction_on_nats :
+  forall (P : nat -> Prop),
+    (forall (n : nat), (forall (k : nat), k < n -> P k) -> P n) ->
+      forall (n : nat), P n.
+Proof.
+  intros. eapply strong_induction_on_nats'; eauto.
+Qed.
+
+Theorem if_path_then_shorter_path_to_antineighbour_of_dest :
+  forall (g : graph) (p : path), hasPath g p -> 1 <= length p ->
+  exists (p' : path) (n : node), origin p = origin p' /\ destination p' = n /\
+    hasEdge g n (destination p) /\ length p = S (length p').
+Proof.
+  intros. remember (route p) as rp. destruct rp.
+  - unfold length in H0. rewrite <- Heqrp in H0. simpl in H0. inversion H0.
+Admitted.
+
+Definition reachable_in_n_or_less (startn : node) (endn : node) (g : graph)
+  (n : nat) : Prop :=
+  exists (p : path), hasPath g p /\ origin p = startn /\ destination p = endn /\
+    length p <= n.
+
+(* TODO: what happens to frontier nodes in parent array? *)
+(* TODO: reachable in n or less? *)
+
+Lemma path_0 :
+  forall (p : path), length p = 0 ->
+    origin p = destination p.
+Proof.
+  intros p H.
+  unfold origin. unfold destination. destruct p.
+  simpl. unfold length in H. unfold route in H. simpl in H.
+  destruct l. simpl. auto. simpl in H. inversion H.
+Qed.
+
+Theorem finds_path_from_frontier_if_reachable_in_n :
+  forall (g : graph), GoodGraph g ->
+    forall (s : node) (frontier : list node), In s frontier -> forall (n : nat),
+      let P := fun (n : nat) => (forall (d : node), reachable_in_n s d g n ->
+        forall (p : path), p = traceParent (bfs (g, frontier, [])) d ->
+          s = origin p /\ d = destination p) in P n.
+Proof.
+  intros g Hg s frontier Hs.
+  eapply (strong_induction_on_nats).
+  intros n Hind.
+  intros d Hreach p ptrace.
+  destruct n. Focus 2.
+  unfold reachable_in_n in Hreach.
+  elim Hreach. intros p' [H1 [H2 [H3 H4]]]. assert (1 <= length p').
+  rewrite H4. apply le_n_S. apply le_0_n.
+  elim (if_path_then_shorter_path_to_antineighbour_of_dest g p' H1 H).
+  intros p'' Hp''.
+  remember (Hind n (lt_n_Sn n) _) as Hind_n.
+Abort.
+(* brain explode *)
+  
+
+(* May be useful
+Theorem shortest_path_exists_for_reachables :
+  forall (g : graph) (s : node) (d : node), reachable s d g ->
+    exists (p : path), s = origin p /\ d = destination p /\
+    forall (p : path), *)
 
 (** For every good graph g and initial frontier and node s,
     if s is in the frontier
