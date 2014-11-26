@@ -331,6 +331,7 @@ Eval compute in ( (* CLRS 3rd edition BFS example *)
   ; (s, [r; w])
   ; (w, [s; t; x])
   ; (t, [u; x; w])
+  ; (u, [t; x; y])
   ; (x, [w; t; u; y])
   ; (y, [x; u])
   ] in
