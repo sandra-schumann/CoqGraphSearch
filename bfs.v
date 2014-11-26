@@ -289,11 +289,8 @@ Definition bfs_step (args : graph * list node * parent_t) :
   match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
   | None => None
   | Some (u, neighbors, g', frontier_remaining) =>
-      let vs := 
-        filter (fun v => andb
-          (node_in_decb v (nodes g)) (* we want a path to it *)
-          (negb (hasParent parent v))) (* we do not have one yet *)
-        neighbors in
+      let vs0 :=  filter (fun v => node_in_decb v (nodes g)) neighbors in
+      let vs  :=  filter (fun v => negb (hasParent parent v)) vs0 in
           Some (g',
                 vs++frontier_remaining,
                 fold_right (setParent u) parent vs)
