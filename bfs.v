@@ -280,20 +280,34 @@ Lemma firstForWhichSomeAndTail_corr :
     + pv.
 Qed.
 
-Definition setParent (u v:node) parent := (v,u)::parent. (* v's parent is u *)
 Definition hasParent parent (v:node) := node_in_decb v (map (@fst node node) parent).
+
+Definition bfsPushFilter g parent neighbors :=
+      filter (fun v => negb (hasParent parent v)) (
+        filter (fun v => node_in_decb v (nodes g)) neighbors ).
+
+Definition bfsPushFilter_no_aliens : forall g parent neighbors,
+  forall v, In v (bfsPushFilter g parent neighbors) -> In v neighbors.
+Admitted.
+
+Definition bfsPushFilter_filters_graph : forall g parent neighbors,
+  forall v, In v (bfsPushFilter g parent neighbors) -> In v (nodes g).
+Admitted.
+
+Definition bfsPushFilter_filters_parent : forall g parent neighbors,
+  forall v u, In v (bfsPushFilter g parent neighbors) -> ~In (v,u) parent.
+Admitted.
 
 Definition bfs_step (args : graph * list node * parent_t) :
   option (graph * list node * parent_t) :=
   let (args', parent) := args in let (g, frontier) := args' in
   match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
   | None => None
-  | Some (u, neighbors, g', frontier_remaining) =>
-      let vs0 :=  filter (fun v => node_in_decb v (nodes g)) neighbors in
-      let vs  :=  filter (fun v => negb (hasParent parent v)) vs0 in
-          Some (g',
-                vs++frontier_remaining,
-                fold_right (setParent u) parent vs)
+  | Some (u, neighbors, g', frontier_remaining) => 
+      let vs := bfsPushFilter g parent neighbors in
+      Some (g',
+            vs++frontier_remaining,
+            map (fun v => (v,u)) vs ++ parent)
 end.
 
 Function bfs (args : graph * list node * parent_t)
@@ -353,20 +367,28 @@ Lemma bfs_parent_addonly :
     destruct p; destruct p; destruct a. myinj e.
     (* automate up to here *)
     eapply IHp; clear IHp; try reflexivity.
-    assert (In (v, u) parent -> In (v, u) (addToParent n l0 parent)) by admit; auto.
+    rename l0 into neighbors.
+    unfold fold_right; induction (bfsPushFilter g parent neighbors); pv.
   }
 Qed.
 
 Lemma addToParent_hasEdge:
-  forall g n vs parent0,
-  (forall v, In v vs -> hasEdge g n v) ->
-  (forall u v, In (v, u) parent0 -> hasEdge g u v) ->
-  (forall u v, In (v, u) (addToParent n vs parent0) -> hasEdge g u v).
-  intros until vs. revert g n.
-  induction vs; pv.
-  unfold addToParent in *; simpl in *.
-  destruct (notSet parent0 a); pv.
-  destruct H1; pv.
+  forall g0 n parent0 neighbors,
+  (forall v, In v neighbors -> hasEdge g0 n v) ->
+  (forall u v, In (v, u) parent0 -> hasEdge g0 u v) ->
+  (forall g u v, In (v, u)
+    (map (fun v => (v,n)) (bfsPushFilter g parent0 neighbors) ++ parent0)
+    -> hasEdge g0 u v).
+  intros.
+  specialize (in_app_or _ _ _ H1); intro Hor; destruct Hor; auto; clear H1.
+  induction neighbors; intros; simpl in H2; pv.
+  unfold bfsPushFilter in H2; simpl in H2.
+  destruct (node_in_decb a (nodes g)); simpl in H2; auto.
+  destruct (hasParent parent0 a); simpl in H2; auto.
+  destruct H2; auto. clear IHneighbors.
+  myinj H1.
+  eapply H.
+  left; auto.
 Qed.
 
 Lemma bfs_no_alien_edges :
@@ -395,7 +417,7 @@ Lemma bfs_no_alien_edges :
   eapply IHp.
   - specialize lookupEdgesAndRemove_subgraph_hasEdge; pv.
   - specialize (lookupEdgesAndRemove_hasEdge _ _ _ _ _ H3); intro Hnew.
-    specialize addToParent_hasEdge; pv.
+    apply addToParent_hasEdge; pv.
   - assumption.
 Qed.
 
