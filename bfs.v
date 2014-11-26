@@ -21,6 +21,11 @@ Definition node_eq_dec : forall (x y:node), {x = y} + {x <> y}.
   decide equality. apply eq_nat_dec.
 Defined.
 Definition node_in_dec := in_dec node_eq_dec.
+Definition node_in_decb v vs := if in_dec node_eq_dec v vs then true else false.
+Lemma node_in_decb_true : forall v vs, node_in_decb v vs = true -> In v vs.
+  unfold node_in_decb; intros. destruct (in_dec node_eq_dec v vs); auto; inversion H. Qed.
+Lemma node_in_decb_false : forall v vs, node_in_decb v vs = false -> ~ In v vs.
+  unfold node_in_decb; intros. destruct (in_dec node_eq_dec v vs); auto; inversion H. Qed.
 
 Definition adj := (node * list node)%type.
 Definition graph := list adj.
@@ -275,24 +280,23 @@ Lemma firstForWhichSomeAndTail_corr :
     + pv.
 Qed.
 
-Definition notSet (m:parent_t) (k:node) :=
-    if node_in_dec k (map (@fst node node) m) then false else true.
-
-Definition addToParent v neighbors parent :=
-  fold_right (fun u pr => (u,v)::pr) parent (filter (notSet parent) neighbors).
-
-Example Ex_addToParent_1 : addToParent (Node 1) [Node 2; Node 3] [(Node 2, Node 0)]
-  = [(Node 3, Node 1); (Node 2, Node 0)]. reflexivity. Qed.
+Definition setParent (u v:node) parent := (v,u)::parent. (* v's parent is u *)
+Definition hasParent parent (v:node) := node_in_decb v (map (@fst node node) parent).
 
 Definition bfs_step (args : graph * list node * parent_t) :
   option (graph * list node * parent_t) :=
   let (args', parent) := args in let (g, frontier) := args' in
   match firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier with
   | None => None
-  | Some (v, neighbors, g', frontier') => 
+  | Some (u, neighbors, g', frontier_remaining) =>
+      let vs := 
+        filter (fun v => andb
+          (node_in_decb v (nodes g)) (* we want a path to it *)
+          (negb (hasParent parent v))) (* we do not have one yet *)
+        neighbors in
           Some (g',
-                filter (notSet parent) neighbors++frontier',
-                addToParent v neighbors parent)
+                vs++frontier_remaining,
+                fold_right (setParent u) parent vs)
 end.
 
 Function bfs (args : graph * list node * parent_t)
