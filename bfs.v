@@ -455,11 +455,6 @@ Inductive hasPath : graph -> path -> Prop :=
 | IdPath : forall g n, In n (nodes g) -> hasPath g (n, [])
 | ConsPath : forall g n n' r', hasEdge g n n' -> hasPath g (n, r') -> hasPath g (n', n::r').
 
-(** node endn is reachable from node startn if there exists a path from
-    startn to endn in a graph g **)
-Definition reachable (startn : node) (endn : node) (g : graph) : Prop :=
-  exists (p : path), hasPath g p /\ origin p = startn /\ destination p = endn.
-
 Lemma bfs_path_riginate_from_initial_frontier:
    forall frontier0 args,
    forall g frontier parent, args = (g, frontier, parent) ->
@@ -494,6 +489,26 @@ Lemma emptyPathShortest : forall g v ss,
   - apply IdPath; assumption.
   - intros. unfold pathLen; simpl. induction (length (route p')); auto.
 Qed.
+
+Lemma singletonPathShortest : forall g u v ss,
+  In u (nodes g) -> In v (nodes g) -> In u ss ->
+  hasEdge g u v -> shortestPathFromTo g ss v (v,[u]).
+  intros; split; [split;[|split]|]; auto.
+  - constructor; try constructor; auto.
+  - Abort.
+
+Require Import Coq.Relations.Relation_Operators.
+Definition reachable g := clos_trans_1n node (hasEdge g).
+
+Lemma bfs_path_riginate_from_initial_frontier:
+  forall g0, GoodGraph g0 ->
+  forall args g frontier parent, args = (g, frontier, parent) ->
+  forall ret, ret = bfs args ->
+  forall u, In u frontier ->
+  lookupEdgesAndRemove g u = lookupEdgesAndRemove g0 u ->
+  forall v, reachable g0 u v -> exists u', In (v, u') ret.
+  intros until args; functional induction (bfs args); pv.
+Abort.
 
 (** The following section defines the correctness of BFS. **)
 
