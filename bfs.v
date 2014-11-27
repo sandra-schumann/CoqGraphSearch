@@ -379,7 +379,7 @@ Lemma addToParent_hasEdge:
   left; auto.
 Qed.
 
-Lemma bfs_no_alien_edges :
+Lemma bfs_no_alien_edges' :
   forall (g0 g:graph) (frontier:list node) parent,
   (forall u v, hasEdge g u v -> hasEdge g0 u v) ->
   (forall u v, In (v, u)                      parent -> hasEdge g0 u v) ->
@@ -409,6 +409,13 @@ Lemma bfs_no_alien_edges :
   - assumption.
 Qed.
 
+Lemma bfs_no_alien_edges : forall (g:graph) (frontier:list node),
+  forall u v : node, In (v, u) (bfs (g, frontier, [])) -> hasEdge g u v.
+  intros.
+  apply (bfs_no_alien_edges' g g frontier []); auto.
+  unfold In; intros. pv.
+Qed.
+
 (** A path is essentially a list of nodes representing a series of edges
     leading from one node (the origin) to another (the destination).
     The part of the path leading up to the destination (meaning all of
@@ -420,7 +427,7 @@ Qed.
 Definition path := (node * list node)%type.
 Definition destination (p:path) := fst p.
 Definition route (p:path) := snd p.
-Definition length (p : path) : nat := length (route p).
+Definition pathLen (p : path) : nat := length (route p).
 Definition origin (p : path) : node := last (route p) (destination p).
 
 (** This assumes that the statement (u's parent is v) comes before any statement
@@ -452,6 +459,41 @@ Inductive hasPath : graph -> path -> Prop :=
     startn to endn in a graph g **)
 Definition reachable (startn : node) (endn : node) (g : graph) : Prop :=
   exists (p : path), hasPath g p /\ origin p = startn /\ destination p = endn.
+
+Lemma bfs_path_riginate_from_initial_frontier:
+   forall frontier0 args,
+   forall g frontier parent, args = (g, frontier, parent) ->
+   forall ret, ret = bfs args ->
+  (forall v,   In v frontier -> In (origin (traceParent parent v)) frontier0) ->
+  (forall u v, In (v, u) parent -> In (origin (traceParent parent v)) frontier0) ->
+  (forall u v, In (v, u) ret    -> In (origin (traceParent ret    v)) frontier0).
+  intros until args; functional induction (bfs args); pv.
+  remember (firstForWhichSomeAndTail (lookupEdgesAndRemove g) frontier) as L.
+  destruct L; [|pv]. pve; pve; pve. symmetry in HeqL.
+  elim (firstForWhichSomeAndTail_corr _ _ _ _ HeqL); intros.
+  elim H; intros; clear H. destruct H0. destruct H0. rename x0 into discarded.
+  replace x with n in * by (apply (eq_sym (lookupEdgesAndRemove_node _ _ _ _ _ H0))).
+  repeat mysimp.
+  remember (bfsPushFilter g parent l0) as vs.
+  rename l into frontier_remaining; rename l0 into neighbors.
+  eapply (IHp _ _ _ eq_refl); clear IHp; [reflexivity| | |apply H3]; clear H3;
+      clear u v H.
+  (*
+  - if In v frontier_remaining then H1 else unroll one step of traceParent (to n); H2
+  - (if In (v,u) parent then parentAddOnly else unroll one step of traceParent (to n));H2
+  *)
+Abort.
+
+Definition pathFromTo g ss d p := In (origin p) ss /\ destination p = d /\ hasPath g p.
+Definition shortestPathFromTo g ss d p := pathFromTo g ss d p /\ forall p', pathFromTo g ss d p' -> pathLen p' >= pathLen p.
+Lemma emptyPathShortest : forall g v ss,
+  In v (nodes g) -> In v ss -> shortestPathFromTo g ss v (v,[]).
+  intros; split; [split;[|split]|].
+  - assumption.
+  - reflexivity.
+  - apply IdPath; assumption.
+  - intros. unfold pathLen; simpl. induction (length (route p')); auto.
+Qed.
 
 (** The following section defines the correctness of BFS. **)
 
@@ -498,29 +540,29 @@ Proof.
 Qed.
 
 Theorem if_path_then_shorter_path_to_antineighbour_of_dest :
-  forall (g : graph) (p : path), hasPath g p -> 1 <= length p ->
+  forall (g : graph) (p : path), hasPath g p -> 1 <= pathLen p ->
   exists (p' : path) (n : node), origin p = origin p' /\ destination p' = n /\
-    hasEdge g n (destination p) /\ length p = S (length p').
+    hasEdge g n (destination p) /\ pathLen p = S (pathLen p').
 Proof.
   intros. remember (route p) as rp. destruct rp.
-  - unfold length in H0. rewrite <- Heqrp in H0. simpl in H0. inversion H0.
+  - unfold pathLen in H0. rewrite <- Heqrp in H0. simpl in H0. inversion H0.
 Admitted.
 
 Definition reachable_in_n_or_less (startn : node) (endn : node) (g : graph)
   (n : nat) : Prop :=
   exists (p : path), hasPath g p /\ origin p = startn /\ destination p = endn /\
-    length p <= n.
+    pathLen p <= n.
 
 (* TODO: what happens to frontier nodes in parent array? *)
 (* TODO: reachable in n or less? *)
 
 Lemma path_0 :
-  forall (p : path), length p = 0 ->
+  forall (p : path), pathLen p = 0 ->
     origin p = destination p.
 Proof.
   intros p H.
   unfold origin. unfold destination. destruct p.
-  simpl. unfold length in H. unfold route in H. simpl in H.
+  simpl. unfold pathLen in H. unfold route in H. simpl in H.
   destruct l. simpl. auto. simpl in H. inversion H.
 Qed.
 
@@ -537,7 +579,7 @@ Proof.
   intros d Hreach p ptrace.
   destruct n. Focus 2.
   unfold reachable_in_n in Hreach.
-  elim Hreach. intros p' [H1 [H2 [H3 H4]]]. assert (1 <= length p').
+  elim Hreach. intros p' [H1 [H2 [H3 H4]]]. assert (1 <= pathLen p').
   rewrite H4. apply le_n_S. apply le_0_n.
   elim (if_path_then_shorter_path_to_antineighbour_of_dest g p' H1 H).
   intros p'' Hp''.
@@ -568,7 +610,7 @@ Definition finds_the_shortest_path : Prop :=
     forall (frontier : list node),
       forall (d : node) (p:path), p = traceParent (bfs (g, frontier, [])) d ->
         forall (p':path), In (origin p') frontier -> (destination p') = d ->
-          length p <= length p'.
+          pathLen p <= pathLen p'.
 
 (** In order for bfs to be correct, all of the above conditions must hold. **)
 Definition bfs_correct : Prop :=
