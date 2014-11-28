@@ -163,7 +163,7 @@ Lemma bfs_corr:
            exists v, In v p -> lookup frontier v <> None
       else forall p', reachableUsing g s d p' ->
            exists p,  traceParent parent d = Some p /\
-                      reachableUsing g s d p /\length p' >= length p
+                      reachableUsing g s d p /\ length p' >= length p
   ) /\ (
     forall v parentPointer l, lookup frontier v = Some (parentPointer, l) ->
       match parentPointer with
@@ -179,12 +179,18 @@ Lemma bfs_corr:
   ((
     forall (s:node), In s start -> forall d,
     forall p', reachableUsing g s d p' ->
-    exists p , traceParent parent d = Some p /\
+    exists p , traceParent ret d = Some p /\
                reachableUsing g s d p /\ length p' >= length p
   ))
 .
   intros until parent.
   functional induction (bfs g unexpanded frontier parent).
   Focus 1. admit.
-  eelim IHl; clear IHl; repeat split.
+  intros.
+  eelim IHl; clear IHl; repeat split; [..|eauto]; auto.
+  Focus 6. apply H2.
+  intro x.
+  instantiate (1:=p').
+  exists x; subst. repeat split.
+
 Qed.
