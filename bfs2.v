@@ -491,23 +491,20 @@ Lemma bfs_corr:
   forall (start:list node),
   forall (g:graph) (unexpanded:list node) (frontier:list found) (parent:list found),
   ((
-    forall (s:node), In s start ->
     forall (d:node),
       if node_in_dec d unexpanded
-      then forall p, reachableUsing g s d p ->
-           exists v, In v p -> lookup frontier v <> None
-      else forall p', reachableUsing g s d p' ->
-           exists p,  traceParent parent d = Some p /\
-                      reachableUsing g s d p /\ length p' >= length p
+      then forall s' p', In s' start -> reachableUsing g s' d p' ->
+           exists v, In v p' -> lookup frontier v <> None
+      else forall s' p', In s' start -> reachableUsing g s' d p' ->
+           exists s  p,  In s  start /\ reachableUsing g s  d p /\
+             traceParent parent d = Some p /\ length p' >= length p
   ) /\ (
     forall v parentPointer l, lookup frontier v = Some (parentPointer, l) ->
       match parentPointer with
       | None => In v start
-      | Some u => hasEdge g u v
-           (* we need more here:
-                - the path is as long as it says on the tin
-                - the path is described in parent
-           *)
+      | Some u => hasEdge g u v /\
+                  (exists s p, In s start /\ reachableUsing g s u p /\
+                  traceParent parent u = Some p /\ length p = l)
       end
       (* we probably don't need another copy of this claim for parent because
         [reachableUsing] already requires that the edge exists *)
@@ -516,25 +513,25 @@ Lemma bfs_corr:
   ))
     -> forall ret, bfs g unexpanded frontier parent = ret ->
   ((
-    forall (s:node), In s start -> forall d,
-    forall p', reachableUsing g s d p' ->
-    exists p , traceParent ret d = Some p /\
-               reachableUsing g s d p /\ length p' >= length p
+    forall d,
+    forall s' p', In s' start -> reachableUsing g s' d p' ->
+    exists s  p , In s  start /\ reachableUsing g s  d p /\
+      traceParent ret d = Some p /\ length p' >= length p
   ))
 .
   intros until parent.
   functional induction (bfs g unexpanded frontier parent).
   Focus 1. admit.
   intros.
-  eelim IHl; clear IHl; repeat split; [..|eauto]; auto; splitHs.
-  Focus 1. intros. exists x. subst. assumption.
+  eelim IHl; clear IHl; repeat split; [..|eauto]; auto; splitHs;
+    [intro x; exists x; subst; assumption|..];
+    clear dependent d; clear dependent s'; clear dependent p'.
   Focus 1. expandBFS.
-    intros s' Hs' d'.
-    destruct (node_in_dec d' unexpanded'). {
-     specialize (remove_does_not_add _ unexpanded unexpanded' H7 d' i); intro.
-     specialize (H s' Hs' d').
-     destruct (node_in_dec d' unexpanded); [|pv].
-     revert H6 H; (*clear;*) intros H6 H.
+    intros d; specialize (H d).
+    destruct (node_in_dec d unexpanded'). {
+     specialize (remove_does_not_add _ unexpanded unexpanded' H5 d i); intro.
+     destruct (node_in_dec d unexpanded); [|pv].
+     revert H; (*clear;*) intros H.
      (*  all paths cross frontier -> all paths cross frontier' *)
      intros p Hp; specialize (H p Hp).
      elim H; intros.
