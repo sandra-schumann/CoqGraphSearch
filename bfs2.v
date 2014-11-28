@@ -459,9 +459,13 @@ Lemma bfs_corr:
   Focus 1. expandBFS.
     intros s' Hs' d'.
     destruct (node_in_dec d' unexpanded'). {
-     specialize (H s' Hs' d').
+     Check (remove_does_not_add _ unexpanded unexpanded' H7).
+     admit.
+    } destruct (node_in_dec d' unexpanded). {
+      admit.
+    } {
+      eapply H3.
     }
-    destruct (node_in_dec d' unexpanded).
   Focus 2. expandBFS.
     specialize (closestUnexpanded_corr foundPathLen unexpanded frontier);
       intro Hcc; rewrite Heqc in Hcc; elim Hcc; clear Hcc;
