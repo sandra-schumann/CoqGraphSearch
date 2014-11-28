@@ -444,6 +444,10 @@ Lemma bfs_corr:
       if node_in_dec d unexpanded
       then forall p, reachableUsing g s d p ->
            exists v, In v p -> lookup frontier v <> None
+           (* we need more here:
+                - the path is as long as it says on the tin
+                - the path is described in parent
+           *)
       else forall p', reachableUsing g s d p' ->
            exists p,  traceParent parent d = Some p /\
                       reachableUsing g s d p /\ length p' >= length p
@@ -475,9 +479,19 @@ Lemma bfs_corr:
   Focus 1. expandBFS.
     intros s' Hs' d'.
     destruct (node_in_dec d' unexpanded'). {
-     Check (remove_does_not_add _ unexpanded unexpanded' H7).
+     specialize (remove_does_not_add _ unexpanded unexpanded' H7 d' i); intro.
+     specialize (H s' Hs' d').
+     destruct (node_in_dec d' unexpanded); [|pv].
+     revert H6 H; (*clear;*) intros H6 H.
+     (*  all paths cross frontier -> all paths cross frontier' *)
+     intros p Hp; specialize (H p Hp).
+     elim H; intros.
+     (* the things taken out of frontier are not in unexpanded: red H8 or red i *)
      admit.
     } destruct (node_in_dec d' unexpanded). {
+      replace d' with u in * by admit.
+      specialize (H s' Hs' u). destruct (node_in_dec u unexpanded); [|pv].
+      subst. simpl. destruct (node_eq_dec u u); [|pv]. destruct pu; simpl in *.
       admit.
     } {
       eapply H3.
