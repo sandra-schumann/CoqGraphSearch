@@ -357,6 +357,33 @@ Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
 | ConsPath : forall g s d p,               reachableUsing g s d    p   ->
              forall d', hasEdge g d d' ->  reachableUsing g s d' (d::p).
 
+Ltac splitHs := repeat (match goal with [ H : _ /\ _ |- _ ] => destruct H end).
+Ltac expandBFS := 
+    match goal with
+      [ H : context[bfs_step ?g ?u ?f ?p] |- _ ]
+          =>unfold bfs_step in H
+          ; remember (closestUnexpanded foundPathLen u f) as c in *
+          ; destruct c; [|inversion H]
+          ; match goal with [ H : context[let (_, _) := ?x in _] |- _ ]
+              =>let fu := fresh "found_u" in let fr := fresh "frontierRemaining" in
+                  destruct x as [fu fr]; simpl in H
+            end
+          ; match goal with [H : context[lookup g (fst ?found_u)] |- _ ]
+              =>remember (lookup g (fst found_u)) as k
+              ; let uu := fresh "u" in let pu := fresh "pu" in
+                  destruct found_u as [uu pu]
+              ; destruct k; [|inversion H]
+            end
+          ; match goal with [H : Some ?ns = lookup _ _ |- _ ]
+              =>simpl in H; symmetry in H
+              ; let neighs := fresh "neighbors" in rename ns into neighs
+            end
+          ; match goal with [H : Some _ = closestUnexpanded _ _ _ |- _ ]
+              =>simpl in H; symmetry in H
+            end
+          ; injection H; clear H; intro; intro; intro
+    end.
+
 Lemma bfs_corr:
   forall (start:list node),
   forall (g:graph) (unexpanded:list node) (frontier:list found) (parent:list found),
@@ -392,38 +419,22 @@ Lemma bfs_corr:
   functional induction (bfs g unexpanded frontier parent).
   Focus 1. admit.
   intros.
-  eelim IHl; clear IHl; repeat split; [..|eauto]; auto;
-      repeat (match goal with [ H : _ /\ _ |- _ ] => destruct H end).
+  eelim IHl; clear IHl; repeat split; [..|eauto]; auto; splitHs.
   Focus 1. intros. exists x. subst. assumption.
-  Focus 2.
-    match goal with
-      [ H : context[bfs_step ?g ?u ?f ?p] |- _ ]
-          =>unfold bfs_step in H
-          ; remember (closestUnexpanded foundPathLen u f) as c in *
-          ; destruct c; symmetry in Heqc; [|inversion H]
-          ; match goal with [ H : context[let (_, _) := ?x in _] |- _ ]
-              =>let fu := fresh "found_u" in let fr := fresh "frontierRemaining" in
-                  destruct x as [fu fr]; simpl in H
-            end
-          ; match goal with [H : context[lookup g (fst ?found_u)] |- _ ]
-              =>remember (lookup g (fst found_u)) as k
-              ; let uu := fresh "u" in let pu := fresh "pu" in
-                  destruct found_u as [uu pu]
-              ; destruct k; symmetry in Heqk; simpl in Heqk; [|inversion H]
-            end
-          ; match goal with [H : lookup g ?n = Some ?ns |- _ ]
-              =>rename ns into neighbors
-            end
-          ; injection e; clear e; intro; intro; intro
-    end.
-    induction l0. {
-      simpl in *. subst; auto.
+  Focus 1. expandBFS.
+    intros s' Hs' d'.
+    destruct (node_in_dec d' unexpanded'). {
+     specialize (H s' Hs' d').
     }
-    rewrite <- H6.
-    subst; pv.
-     
-    Focus 2.
-    pv.
+    destruct (node_in_dec d' unexpanded).
+  Focus 2. expandBFS.
+    specialize (closestUnexpanded_corr foundPathLen unexpanded frontier);
+      intro Hcc; rewrite Heqc in Hcc; elim Hcc; clear Hcc;
+      intro; intro; splitHs; simpl in *.
+    induction neighbors. {
+      simpl in *. subst. intros.
+      specialize (lookup_corr); intros.
+    }
 
 
 Qed.
