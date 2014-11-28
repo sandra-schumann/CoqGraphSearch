@@ -311,6 +311,16 @@ Proof.
   crush.
 Qed.
 
+Lemma closestUnexpanded_unexpanded : forall f unexpanded frontier ret,
+  closestUnexpanded f unexpanded frontier = Some ret ->
+  In (fst (fst ret)) unexpanded.
+Proof.
+  intros. functional induction (closestUnexpanded f unexpanded frontier).
+  inversion H.
+  inversion H. simpl. auto.
+  apply IHo. auto.
+Qed.
+
 Lemma closestUnexpanded_corr : forall f unexpanded frontier,
   sorted f frontier ->
     match closestUnexpanded f unexpanded frontier with
@@ -320,6 +330,7 @@ Lemma closestUnexpanded_corr : forall f unexpanded frontier,
         (* it would suffice if frontier was just a permutation of the above *)
         /\ (forall p, In p discarded -> ~ In (fst p) unexpanded)
         /\ (forall p, In p (snd ret) ->   In p frontier /\ f p >= f (fst ret))
+        /\ In (fst (fst ret)) unexpanded
     end.
 Proof.
   intros. remember (closestUnexpanded f unexpanded frontier) as oret.
@@ -328,13 +339,15 @@ Proof.
   functional induction (closestUnexpanded f unexpanded frontier).
   crush.
   myinj Heqoret. remember (extractMin_as_sum _ _ _ _ e) as H1; clear HeqH1.
-  exists []. split. simpl. auto. split. auto.
+  exists []. split. simpl. auto. split. auto. split.
   intros. split. simpl in *. crush. simpl.
   remember (extractMin_corr _ _ H) as H2; clear HeqH2.
   remember (extractMin f frontier) as Hmin in *. destruct Hmin.
   inversion e. simpl in *. destruct p1. myinj H4.
   simpl in *. apply H2. right. auto.
   simpl in *. inversion e.
+  simpl in *. auto.
+
   eelim IHo; [..|eauto]. clear IHo.
   intros. destruct H0 as [H1 [H2 H3]].
   exists (p0::x).
@@ -342,11 +355,12 @@ Proof.
   split; intros.
   simpl in *. destruct H0 as [H0 | H0].
   subst; auto.
-  apply H2. apply H0.
+  apply H2. apply H0. split.
   remember (extractMin_as_sum f _ _ _ e) as H4; clear HeqH4.
   subst. split. simpl. right. apply H3. apply H0.
-  apply H3. apply H0. remember (extractMin_as_sum f _ _ _ e) as H4; clear HeqH4.
-  eapply sorted_tail. apply H. apply H4.
+  apply H3. apply H0.
+  simpl in *. apply H3. eapply sorted_tail. apply H.
+  apply (extractMin_as_sum f). apply e.
 
   intros. functional induction (closestUnexpanded f unexpanded frontier).
   destruct frontier. auto.
@@ -394,6 +408,33 @@ Definition bfs_step
           end
   end.
 
+Ltac splitHs := repeat (match goal with [ H : _ /\ _ |- _ ] => destruct H end).
+Ltac expandBFS := 
+    match goal with
+      [ H : context[bfs_step ?g ?u ?f ?p] |- _ ]
+          =>unfold bfs_step in H
+          ; remember (closestUnexpanded foundPathLen u f) as c in *
+          ; destruct c; [|inversion H]
+          ; match goal with [ H : context[let (_, _) := ?x in _] |- _ ]
+              =>let fu := fresh "found_u" in let fr := fresh "frontierRemaining" in
+                  destruct x as [fu fr]; simpl in H
+            end
+          ; match goal with [H : context[lookup g (fst ?found_u)] |- _ ]
+              =>remember (lookup g (fst found_u)) as k
+              ; let uu := fresh "u" in let pu := fresh "pu" in
+                  destruct found_u as [uu pu]
+              ; destruct k; [|inversion H]
+            end
+          ; match goal with [H : Some ?ns = lookup _ _ |- _ ]
+              =>simpl in H; symmetry in H
+              ; let neighs := fresh "neighbors" in rename ns into neighs
+            end
+          ; match goal with [H : Some _ = closestUnexpanded _ _ _ |- _ ]
+              =>simpl in H; symmetry in H
+            end
+          ; injection H; clear H; intro; intro; intro
+    end.
+
 Function bfs
   (g:graph) (unexpanded:list node) (frontier:list found) (parent:list found)
   {measure length unexpanded}
@@ -405,7 +446,9 @@ Function bfs
       let (args', parent') := args in let (unexpanded', frontier') := args' in
       bfs g unexpanded' frontier' parent'
   end.
-Admitted.
+intros. expandBFS. remember (closestUnexpanded_unexpanded _ _ _ _ Heqc) as H2.
+simpl in *. specialize (remove_length _ _ H2). intros. subst. omega.
+Defined.
 
 Functional Scheme bfs_ind := Induction for bfs Sort Prop.
 
@@ -438,32 +481,11 @@ Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
 | ConsPath : forall g s d p,               reachableUsing g s d    p   ->
              forall d', hasEdge g d d' ->  reachableUsing g s d' (d::p).
 
-Ltac splitHs := repeat (match goal with [ H : _ /\ _ |- _ ] => destruct H end).
-Ltac expandBFS := 
-    match goal with
-      [ H : context[bfs_step ?g ?u ?f ?p] |- _ ]
-          =>unfold bfs_step in H
-          ; remember (closestUnexpanded foundPathLen u f) as c in *
-          ; destruct c; [|inversion H]
-          ; match goal with [ H : context[let (_, _) := ?x in _] |- _ ]
-              =>let fu := fresh "found_u" in let fr := fresh "frontierRemaining" in
-                  destruct x as [fu fr]; simpl in H
-            end
-          ; match goal with [H : context[lookup g (fst ?found_u)] |- _ ]
-              =>remember (lookup g (fst found_u)) as k
-              ; let uu := fresh "u" in let pu := fresh "pu" in
-                  destruct found_u as [uu pu]
-              ; destruct k; [|inversion H]
-            end
-          ; match goal with [H : Some ?ns = lookup _ _ |- _ ]
-              =>simpl in H; symmetry in H
-              ; let neighs := fresh "neighbors" in rename ns into neighs
-            end
-          ; match goal with [H : Some _ = closestUnexpanded _ _ _ |- _ ]
-              =>simpl in H; symmetry in H
-            end
-          ; injection H; clear H; intro; intro; intro
-    end.
+Lemma removing_corr_item : forall x xs xs',
+  remove node_eq_dec x xs = xs' ->
+  forall x', ~(In x' xs') -> In x' xs -> x = x'.
+Proof.
+Admitted.
 
 Lemma bfs_corr:
   forall (start:list node),
