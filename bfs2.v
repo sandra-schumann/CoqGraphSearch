@@ -308,7 +308,7 @@ Definition bfs_step
           | None => None (* invalid graph *)
           | Some neighbors =>
               let frontierNew := map (fun v => (v, (Some u, 1+l))) neighbors in
-              let frontier' := fold_right insert frontierRemaining frontierNew in
+              let frontier' := fold_right (insert foundPathLen) frontierRemaining frontierNew in
               Some (unexpanded', frontier', parent')
           end
   end.
