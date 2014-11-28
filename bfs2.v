@@ -266,10 +266,8 @@ Lemma insert_corr : forall {A:Type} (f:A->nat) (x:A) (xs : list A) (ys : list A)
   insert f x xs = ys -> sorted f xs -> In x ys /\ sorted f ys.
 Proof.
   intros; split.
+Abort.
   
-  
-  
-
 Function closestUnexpanded
     (f:found->nat) (unexpanded : list node) (frontier : list found)
     {measure length frontier}
@@ -285,13 +283,13 @@ Function closestUnexpanded
 Admitted.
 
 Lemma closestUnexpanded_corr : forall f unexpanded frontier,
-    match closestUnexpanded f frontier with
+    match closestUnexpanded f unexpanded frontier with
     | None => forall p, In p frontier -> ~ In (fst p) unexpanded
     | Some ret =>
         exists discarded, frontier = discarded ++ [fst ret] ++ snd ret
         (* it would suffice if frontier was just a permutation of the above *)
-        /\ (forall p, In p discarded -> ~ In p unexpanded)
-        /\ (forall p, In p (snd ret) ->   In p frontier /\ f p >= f (fst ret)).
+        /\ (forall p, In p discarded -> ~ In (fst p) unexpanded)
+        /\ (forall p, In p (snd ret) ->   In p frontier /\ f p >= f (fst ret))
     end.
 Admitted.
 
