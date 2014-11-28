@@ -88,27 +88,40 @@ Admitted.
 
 Definition insert {A:Type} (x:A) (xs:list A) := x::xs.
 
+(* inlining bfs_step to bfs did NOT give us functional induction, but
+   separating it out did... *)
+Definition bfs_step
+  (g:graph) (unexpanded:list node) (frontier:list found) (parent:list found)
+  := match closestUnexpanded foundPathLen unexpanded frontier with
+  | None => None
+  | Some p => let (found_u, frontierRemaining) := p in
+          let u := fst found_u in
+          let l := foundPathLen found_u in
+          let parent' := found_u::parent in
+          let unexpanded' := remove node_eq_dec u unexpanded in
+          match lookup g u with
+          | None => None (* invalid graph *)
+          | Some neighbors =>
+              let frontierNew := map (fun v => (v, (Some u, 1+l))) neighbors in
+              let frontier' := fold_right insert frontierRemaining frontierNew in
+              Some (unexpanded', frontier', parent')
+          end
+  end.
+
 Function bfs
-    (g:graph) (unexpanded:list node) (frontier:list found) (parent:list found)
-    {measure length unexpanded}
-    : list found
-    :=
-    match closestUnexpanded foundPathLen unexpanded frontier with
-    | None => parent
-    | Some p => let (found_u, frontierRemaining) := p in
-            let u := fst found_u in
-            let l := foundPathLen found_u in
-            let parent' := found_u::parent in
-            let unexpanded' := remove node_eq_dec u unexpanded in
-            match lookup g u with
-            | None => nil (* invalid graph *)
-            | Some neighbors =>
-                let frontierNew := map (fun v => (v, (Some u, 1+l))) neighbors in
-                let frontier' := fold_right insert frontierRemaining frontierNew in
-                bfs g unexpanded' frontier' parent'
-            end
-    end.
+  (g:graph) (unexpanded:list node) (frontier:list found) (parent:list found)
+  {measure length unexpanded}
+  : list found
+  :=
+  match bfs_step g unexpanded frontier parent with
+  | None => parent
+  | Some args =>
+      let (args', parent') := args in let (unexpanded', frontier') := args' in
+      bfs g unexpanded' frontier' parent'
+  end.
 Admitted.
+
+Functional Scheme bfs_ind := Induction for bfs Sort Prop.
 
 Fixpoint traceParent
   (parent:list found) (v:node)
@@ -171,6 +184,7 @@ Lemma bfs_corr:
   ))
 .
   intros until parent.
+  functional induction (bfs g unexpanded frontier parent).
   repeat split.
   intros until d; destruct (node_in_dec d unexpanded).
 Qed.
