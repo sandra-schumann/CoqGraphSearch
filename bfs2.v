@@ -76,6 +76,16 @@ Function closestUnexpanded
     end.
 Admitted.
 
+Lemma closestUnexpanded_corr : forall f unexpanded frontier,
+    match extractMin f frontier with
+    | None => forall p, In p frontier -> ~ In (fst p) unexpanded
+    | Some ret => forall p, In p frontier -> 
+        if node_in_dec (fst p) unexpanded
+        then f p >= f (fst ret) /\ p <> (fst ret) <-> In p (snd ret)
+        else ~ In p (snd ret)
+    end.
+Admitted.
+
 Definition insert {A:Type} (x:A) (xs:list A) := x::xs.
 
 Function bfs
