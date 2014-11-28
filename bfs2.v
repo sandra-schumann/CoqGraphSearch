@@ -9,6 +9,8 @@ Require Import Recdef.
 Require Import Coq.Arith.Peano_dec.
 Require Import Coq.Arith.Compare_dec.
 Require Import Coq.omega.Omega.
+Require Import CpdtTactics.
+Require Import List.
 Import ListNotations.
 
 Inductive node := Node : nat -> node.
@@ -142,27 +144,131 @@ Proof.
   intros v vs. apply remove_length'.
 Qed.
 
-Fixpoint extractMin (f:found->nat) (frontier : list found) :
-  option (found * list found) :=
+Fixpoint insert {A:Type} (f:A->nat) (y:A) (xs:list A) : list A :=
+  match xs with
+  | nil => [y]
+  | x::xs' => if le_gt_dec (f y) (f x) then y::xs
+              else x::(insert f y xs')
+  end.
+
+Definition extractMin {A:Type} (f:A->nat) (frontier : list A) :
+  option (A * list A) :=
     match frontier with
     | nil => None
-    | p::frontier' =>
-            match extractMin f frontier' with
-            | None => Some (p, nil)
-            | Some ret => let (p', remaining') := ret in
-                    if le_gt_dec (f p) (f p') 
-                         then Some (p, frontier')
-                         else Some (p', p::remaining')
-            end
+    | p::frontier' => Some (p, frontier')
     end.
 
-Lemma extractMin_corr : forall f frontier,
+Definition list_all {A:Type} (P:A->Prop) (xs:list A) : Prop := 
+  fold_right (fun h t => P h /\ t) True xs.
+
+Lemma in_list_all {A} (P:A->Prop) (xs:list A) : 
+  (forall x, In x xs -> P x) <-> list_all P xs.
+Proof.
+  induction xs; crush.
+Qed.
+
+Lemma in_insert :
+  forall {A} (f:A->nat) (xs:list A) (n:A), 
+    forall x, In x (insert f n xs) -> x = n \/ In x xs.
+Proof.
+  induction xs ; crush.
+  destruct (le_gt_dec (f n) (f a)) ; crush.
+  specialize (IHxs _ _ H0). crush.
+Qed.
+
+(* The opposite fact will also be useful. *)
+Lemma insert_in : 
+  forall {A} (f:A->nat) (xs:list A) (n:A), 
+    forall x, x = n \/ In x xs -> In x (insert f n xs).
+Proof.
+  induction xs ; crush.
+  destruct (le_gt_dec (f n) (f a)) ; crush.
+  destruct (le_gt_dec (f n) (f x)) ; crush.
+  destruct (le_gt_dec (f n) (f a)) ; crush.
+Qed.
+
+Fixpoint sorted {A:Type} (f:A->nat) (xs : list A) : Prop :=
+  match xs with
+  | nil => True
+  | h::t => sorted f t /\ list_all (fun x => le (f h) (f x)) t
+  end.
+
+Lemma if_all_then_x : forall {A:Type} (x:A) (xs:list A) (P:A->Prop),
+  list_all P xs -> In x xs -> P x.
+Proof.
+  intros. induction xs.
+  inversion H0.
+  destruct H as [H1 H2]. destruct H0 as [H0 | H0].
+  subst. auto.
+  auto.
+Qed.
+
+Lemma extractMin_corr : forall {A:Type} (f:A->nat) (frontier : list A),
+  sorted f frontier ->
     match extractMin f frontier with
     | None => frontier = nil
     | Some ret => forall p, In p frontier -> 
-            f p >= f (fst ret) /\ p <> (fst ret) <-> In p (snd ret)
+            (f p >= f (fst ret) /\ (p <> (fst ret) -> In p (snd ret)))
     end.
-Admitted.
+Proof.
+  intros. unfold extractMin. destruct frontier. auto.
+  destruct H as[H1 H2]. intros. split.
+  simpl in *. destruct H as [H | H].
+  subst. auto. remember (if_all_then_x _ _ _ H2 H) as H3. simpl in H3.
+  omega.
+  simpl in *. intros. destruct H as [H | H]. destruct H0. auto.
+  auto.
+Qed.
+
+Lemma list_all_imp{A}: 
+  forall (P Q : A -> Prop),
+    (forall (x:A), P x -> Q x) -> 
+  (forall (xs:list A), list_all P xs -> list_all Q xs).
+Proof.
+  intros P Q H.
+  induction xs ; crush.
+Qed.
+
+(* If n <= m and m <= each element of xs, then n <= each element of xs. *)
+Lemma list_lte_nm {A:Type} (f:A->nat) (n m:A) (xs:list A) : 
+  (f n) <= (f m) -> list_all (fun x => le (f m) (f x)) xs ->
+  list_all (fun x => le (f n) (f x)) xs.
+Proof.
+  intros.
+  (* Aha!  Now we can use the list_all_imp lemma to avoid
+    reasining about the list, and reduce this to a single element. *)
+  eapply (list_all_imp (fun x => le (f m) (f x)) (fun x => le (f n) (f x)));
+  [ intros ; omega | auto ].
+Qed.
+
+Lemma insert_sorted : forall {A} f (n:A) xs,
+  sorted f xs -> sorted f (insert f n xs).
+Proof.
+  induction xs ; crush.
+  destruct (le_gt_dec (f n) (f a)) ; simpl.
+  crush.
+  eapply list_lte_nm ; eauto.
+  crush.
+  (* here's where in_list_all comes into play -- we turn the
+     list_all into reasoning about a particular element in 
+     (insert n xs) which has to be either n or one of the xs. *)
+  apply in_list_all.
+  intros.
+  generalize (in_insert f xs n x H2). intro.
+  destruct H3.
+  crush.
+  (* here's where the opposite lemma comes into play. *)
+  rewrite <- in_list_all in H1.
+  crush.
+Qed.
+
+Lemma insert_corr : forall {A:Type} (f:A->nat) (x:A) (xs : list A) (ys : list A),
+  insert f x xs = ys -> sorted f xs -> In x ys /\ sorted f ys.
+Proof.
+  intros; split.
+  
+  
+  
 
 Function closestUnexpanded
     (f:found->nat) (unexpanded : list node) (frontier : list found)
@@ -179,16 +285,15 @@ Function closestUnexpanded
 Admitted.
 
 Lemma closestUnexpanded_corr : forall f unexpanded frontier,
-    match extractMin f frontier with
+    match closestUnexpanded f frontier with
     | None => forall p, In p frontier -> ~ In (fst p) unexpanded
-    | Some ret => forall p, In p frontier -> 
-        if node_in_dec (fst p) unexpanded
-        then f p >= f (fst ret) /\ p <> (fst ret) <-> In p (snd ret)
-        else ~ In p (snd ret)
+    | Some ret =>
+        exists discarded, frontier = discarded ++ [fst ret] ++ snd ret
+        (* it would suffice if frontier was just a permutation of the above *)
+        /\ (forall p, In p discarded -> ~ In p unexpanded)
+        /\ (forall p, In p (snd ret) ->   In p frontier /\ f p >= f (fst ret)).
     end.
 Admitted.
-
-Definition insert {A:Type} (x:A) (xs:list A) := x::xs.
 
 (* inlining bfs_step to bfs did NOT give us functional induction, but
    separating it out did... *)
