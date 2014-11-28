@@ -474,10 +474,6 @@ Lemma bfs_corr:
       if node_in_dec d unexpanded
       then forall p, reachableUsing g s d p ->
            exists v, In v p -> lookup frontier v <> None
-           (* we need more here:
-                - the path is as long as it says on the tin
-                - the path is described in parent
-           *)
       else forall p', reachableUsing g s d p' ->
            exists p,  traceParent parent d = Some p /\
                       reachableUsing g s d p /\ length p' >= length p
@@ -486,6 +482,10 @@ Lemma bfs_corr:
       match parentPointer with
       | None => In v start
       | Some u => hasEdge g u v
+           (* we need more here:
+                - the path is as long as it says on the tin
+                - the path is described in parent
+           *)
       end
       (* we probably don't need another copy of this claim for parent because
         [reachableUsing] already requires that the edge exists *)
@@ -526,14 +526,4 @@ Lemma bfs_corr:
     } {
       eapply H3.
     }
-  Focus 2. expandBFS.
-    specialize (closestUnexpanded_corr foundPathLen unexpanded frontier);
-      intro Hcc; rewrite Heqc in Hcc; elim Hcc; clear Hcc;
-      intro; intro; splitHs; simpl in *.
-    induction neighbors. {
-      simpl in *. subst. intros.
-      specialize (lookup_corr); intros.
-    }
-
-
 Qed.
