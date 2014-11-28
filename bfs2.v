@@ -185,6 +185,6 @@ Lemma bfs_corr:
 .
   intros until parent.
   functional induction (bfs g unexpanded frontier parent).
-  repeat split.
-  intros until d; destruct (node_in_dec d unexpanded).
+  Focus 1. admit.
+  eelim IHl; clear IHl; repeat split.
 Qed.
