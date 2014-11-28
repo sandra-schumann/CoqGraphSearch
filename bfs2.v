@@ -203,6 +203,15 @@ Proof.
   auto.
 Qed.
 
+Lemma extractMin_shorter : forall {A:Type} (f:A->nat) (frontier : list A),
+  forall x xs, extractMin f frontier = Some (x,xs) ->
+  length frontier = S (length xs).
+Proof.
+  intros. unfold extractMin in *. destruct frontier.
+  crush.
+  inversion H. crush.
+Qed.
+
 Lemma extractMin_corr : forall {A:Type} (f:A->nat) (frontier : list A),
   sorted f frontier ->
     match extractMin f frontier with
@@ -265,8 +274,10 @@ Qed.
 Lemma insert_corr : forall {A:Type} (f:A->nat) (x:A) (xs : list A) (ys : list A),
   insert f x xs = ys -> sorted f xs -> In x ys /\ sorted f ys.
 Proof.
-  intros; split.
-Abort.
+  intros; split; subst.
+  apply insert_in; crush.
+  apply insert_sorted; crush.
+Qed.
   
 Function closestUnexpanded
     (f:found->nat) (unexpanded : list node) (frontier : list found)
@@ -280,7 +291,14 @@ Function closestUnexpanded
             then Some ret
             else closestUnexpanded f unexpanded frontier'
     end.
-Admitted.
+intros. remember (extractMin_shorter _ _ _ _ teq) as H. omega.
+Defined.
+
+Lemma extractMin_as_sum : forall {A:Type} (f:A->nat) (frontier : list A) x xs,
+  extractMin f frontier = Some (x,xs) -> frontier = x::xs.
+Proof.
+  intros. unfold extractMin in *. destruct frontier; crush.
+Qed.
 
 Lemma closestUnexpanded_corr : forall f unexpanded frontier,
     match closestUnexpanded f unexpanded frontier with
@@ -291,7 +309,24 @@ Lemma closestUnexpanded_corr : forall f unexpanded frontier,
         /\ (forall p, In p discarded -> ~ In (fst p) unexpanded)
         /\ (forall p, In p (snd ret) ->   In p frontier /\ f p >= f (fst ret))
     end.
+Proof.
+  intros. remember (closestUnexpanded f unexpanded frontier) as oret.
+  destruct oret.
 Admitted.
+
+Lemma remove_does_not_add : forall (u:node) (xs:list node) (ys:list node),
+  remove node_eq_dec u xs = ys ->
+  forall (v:node), In v ys -> In v xs.
+Proof.
+  intro u; induction xs; crush.
+  remember (node_eq_dec u a) as uisa. destruct uisa.
+  right. eapply IHxs. remember (remove node_eq_dec u xs) as xsu.
+  crush. crush.
+  simpl in *. destruct H0 as [H0 | H0].
+  left; auto.
+  right; eapply IHxs. remember (remove node_eq_dec u xs) as xsu.
+  crush. crush.
+Qed.
 
 (* inlining bfs_step to bfs did NOT give us functional induction, but
    separating it out did... *)
