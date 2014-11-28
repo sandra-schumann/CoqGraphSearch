@@ -289,10 +289,38 @@ Lemma bfs_corr:
   functional induction (bfs g unexpanded frontier parent).
   Focus 1. admit.
   intros.
-  eelim IHl; clear IHl; repeat split; [..|eauto]; auto.
-  Focus 6. apply H2.
-  intro x.
-  instantiate (1:=p').
-  exists x; subst. repeat split.
+  eelim IHl; clear IHl; repeat split; [..|eauto]; auto;
+      repeat (match goal with [ H : _ /\ _ |- _ ] => destruct H end).
+  Focus 1. intros. exists x. subst. assumption.
+  Focus 2.
+    match goal with
+      [ H : context[bfs_step ?g ?u ?f ?p] |- _ ]
+          =>unfold bfs_step in H
+          ; remember (closestUnexpanded foundPathLen u f) as c in *
+          ; destruct c; symmetry in Heqc; [|inversion H]
+          ; match goal with [ H : context[let (_, _) := ?x in _] |- _ ]
+              =>let fu := fresh "found_u" in let fr := fresh "frontierRemaining" in
+                  destruct x as [fu fr]; simpl in H
+            end
+          ; match goal with [H : context[lookup g (fst ?found_u)] |- _ ]
+              =>remember (lookup g (fst found_u)) as k
+              ; let uu := fresh "u" in let pu := fresh "pu" in
+                  destruct found_u as [uu pu]
+              ; destruct k; symmetry in Heqk; simpl in Heqk; [|inversion H]
+            end
+          ; match goal with [H : lookup g ?n = Some ?ns |- _ ]
+              =>rename ns into neighbors
+            end
+          ; injection e; clear e; intro; intro; intro
+    end.
+    induction l0. {
+      simpl in *. subst; auto.
+    }
+    rewrite <- H6.
+    subst; pv.
+     
+    Focus 2.
+    pv.
+
 
 Qed.
