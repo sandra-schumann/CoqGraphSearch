@@ -529,6 +529,8 @@ Lemma bfs_corr:
       (* we probably don't need another copy of this claim for parent because
         [reachableUsing] already requires that the edge exists *)
   ) /\ (
+    sorted foundPathLen frontier
+  ) /\ (
     forall v, In v unexpanded -> In v (keys g)
   ))
     -> forall ret, bfs g unexpanded frontier parent = ret ->
@@ -540,13 +542,13 @@ Lemma bfs_corr:
   ))
 .
   intros until parent.
-  functional induction (bfs g unexpanded frontier parent).
-  Focus 1. admit.
+  functional induction (bfs g unexpanded frontier parent). Focus 2.
   intros.
   eelim IHl; clear IHl; repeat split; [..|eauto]; auto; splitHs;
     [intro x; exists x; subst; assumption|..];
     clear dependent d; clear dependent s'; clear dependent p'.
   Focus 1. expandBFS.
+  generalize H; intro H'.
   intros d; specialize (H d).
   destruct (node_in_dec d unexpanded).
   Focus 2.
@@ -556,6 +558,12 @@ Lemma bfs_corr:
     elim H; clear H; intros s H; exists s.
     elim H; clear H; intros p H; exists p.
     splitHs; repeat split; try assumption.
+    assert (~ In d unexpanded) by crush.
+    assert (In u unexpanded) by (
+      specialize (closestUnexpanded_corr foundPathLen unexpanded frontier H4);
+      destruct (closestUnexpanded foundPathLen unexpanded frontier); [|pv]; intro Hc;
+      elim Hc; clear Hc; intros; splitHs; crush).
+    assert (d <> u) by crush. subst.
 
 
   (*
