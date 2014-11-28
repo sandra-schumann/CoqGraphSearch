@@ -101,37 +101,28 @@ Proof.
   right. crush.
 Qed.
 
-Lemma lookup_corr : forall ps, NoDup (keys ps) ->
-    forall x y, lookup ps x = Some y <-> In (x, y) ps.
+Lemma in_lookup : forall ps, NoDup (keys ps) ->
+    forall x y, In (x, y) ps -> lookup ps x = Some y.
 Proof.
-  intros; split; intro H0.
-  unfold lookup in *.
-  remember (find (fun p : node * list node => node_eq_decb x (fst p)) ps)
-  as findps. destruct findps; inversion H0. subst.
-  induction ps. discriminate.
-  simpl in H. clear H0.
-  remember (NoDup_remove_1 [] _ _ H) as H1. simpl in H1.
-  remember (IHps H1) as H2.
-  simpl in Heqfindps. remember (node_eq_decb x (fst a)) as xisfsta.
-  destruct xisfsta.
-  myinj Heqfindps.
-  symmetry in Heqxisfsta.
-  destruct (node_eq_decb_corr x (fst a)) as [_ H1].
-  rewrite (H1 Heqxisfsta) in *.
-  simpl. left. destruct a. reflexivity.
-  simpl. right. apply H2. auto.
+  intros.
   unfold lookup.
   induction ps. inversion H0.
   simpl in *. destruct H0 as [H1 | H2].
   subst. simpl. unfold node_eq_decb.
-  remember (node_eq_dec x x) as xisx. destruct xisx.
+  destruct (node_eq_dec x x).
   auto. destruct n. reflexivity.
   remember (NoDup_remove_1 [] _ _ H) as H3. simpl in H3.
   unfold node_eq_decb. remember (node_eq_dec x (fst a)) as xisa.
-  destruct xisa. subst. SearchAbout (NoDup _).
+  destruct xisa. subst.
   remember (NoDup_remove_2 [] _ _ H) as H1. simpl in H1.
   remember (H1 (in_fst_in_keys _ _ _ H2)) as F. inversion F.
   apply IHps. auto. auto.
+Qed.
+
+Lemma lookup_corr : forall ps, NoDup (keys ps) ->
+    forall x y, lookup ps x = Some y <-> In (x, y) ps.
+Proof.
+  intros. split. apply lookup_in. apply in_lookup; crush.
 Qed.
 
 Definition hasEdge (g:graph) u v := exists vs, lookup g u = Some vs /\ In v vs.
