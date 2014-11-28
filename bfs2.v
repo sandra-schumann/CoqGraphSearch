@@ -390,11 +390,23 @@ Qed.
 
 Lemma remove_does_not_add : forall a xs xs', remove node_eq_dec a xs = xs' ->
   forall b, ~ In b xs -> ~ In b xs'.
-Admitted.
+Proof.
+  intros. unfold not. intros.
+  remember (remove_does_not_add' _ _ _ H _ H1) as H2.
+  crush.
+Qed.
 
 Lemma remove_preserves: forall a xs xs', remove node_eq_dec a xs = xs' ->
   forall b, a<>b -> In b xs -> In b xs'.
-Admitted.
+Proof.
+  intros a xs. induction xs; intros; simpl in *; [crush|].
+  destruct H1 as [H1 | H1].
+  - destruct (node_eq_dec a a0). apply IHxs; crush.
+    subst; left; auto.
+  - destruct (node_eq_dec a a0). apply IHxs; crush.
+    subst; simpl in *. destruct (node_eq_dec a0 b).
+    left; auto. right; apply IHxs; auto.
+Qed.
 
 (* inlining bfs_step to bfs did NOT give us functional induction, but
    separating it out did... *)
