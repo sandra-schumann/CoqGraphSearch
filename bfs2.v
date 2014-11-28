@@ -535,14 +535,37 @@ Lemma bfs_corr:
     [intro x; exists x; subst; assumption|..];
     clear dependent d; clear dependent s'; clear dependent p'.
   Focus 1. expandBFS.
-    intros d; specialize (H d).
+  intros d; specialize (H d).
+  destruct (node_in_dec d unexpanded).
+  Focus 2.
+    destruct (node_in_dec d unexpanded');
+      [assert (~ In d unexpanded') by (eapply remove_does_not_add; eauto); pv|].
+    intros s' p' Hs' Hp'; specialize (H s' p' Hs' Hp').
+    elim H; clear H; intros s H; exists s.
+    elim H; clear H; intros p H; exists p.
+    splitHs; repeat split; try assumption.
+
+
+  (*
     destruct (node_eq_dec u d).
+    replace d with u in *; subst.
+    assert (~ In u (remove node_eq_dec u unexpanded)) by (apply remove_In);
+      destruct (node_in_dec u (remove node_eq_dec u unexpanded)); [pv|].
+    Check (closestUnexpanded_corr foundPathLen unexpanded frontier).
+    destruct (node_in_dec d unexpanded); [|pv].
+  *)
+  (*
     Focus 2.
       destruct (node_in_dec d unexpanded);
-        [assert (In d unexpanded') by (eapply remove_preserves; eauto);
-         destruct (node_in_dec d unexpanded'); [|pv]
-        |
-         assert (~ In d unexpanded') by (eapply remove_does_not_add; eauto);
-         destruct (node_in_dec d unexpanded'); [pv|]]; revert H; intro H.
+        [assert (In d unexpanded') by (eapply remove_preserves; eauto)
+        |assert (~ In d unexpanded') by (eapply remove_does_not_add; eauto)];
+       destruct (node_in_dec d unexpanded'); try solve [pv];
+       intros s' p' Hs' Hp'; specialize (H s' p' Hs' Hp');
+       revert H; intro H.
+       elim H; clear H; intros v H; exists v; intro Hv; specialize (H Hv).
        Focus 2.
+       elim H; clear H; intros s H; exists s.
+       elim H; clear H; intros p H; exists p.
+       splitHs; repeat split; try assumption.
+   *)
 Qed.
