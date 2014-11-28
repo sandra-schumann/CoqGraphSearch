@@ -360,7 +360,7 @@ Proof.
   auto. auto. auto.
 Qed.
 
-Lemma remove_does_not_add : forall (u:node) (xs:list node) (ys:list node),
+Lemma remove_does_not_add' : forall (u:node) (xs:list node) (ys:list node),
   remove node_eq_dec u xs = ys ->
   forall (v:node), In v ys -> In v xs.
 Proof.
@@ -373,6 +373,14 @@ Proof.
   right; eapply IHxs. remember (remove node_eq_dec u xs) as xsu.
   crush. crush.
 Qed.
+
+Lemma remove_does_not_add : forall a xs xs', remove node_eq_dec a xs = xs' ->
+  forall b, ~ In b xs -> ~ In b xs'.
+Admitted.
+
+Lemma remove_preserves: forall a xs xs', remove node_eq_dec a xs = xs' ->
+  forall b, a<>b -> In b xs -> In b xs'.
+Admitted.
 
 (* inlining bfs_step to bfs did NOT give us functional induction, but
    separating it out did... *)
@@ -506,21 +514,13 @@ Lemma bfs_corr:
     clear dependent d; clear dependent s'; clear dependent p'.
   Focus 1. expandBFS.
     intros d; specialize (H d).
-    destruct (node_in_dec d unexpanded'). {
-     specialize (remove_does_not_add _ unexpanded unexpanded' H5 d i); intro.
-     destruct (node_in_dec d unexpanded); [|pv].
-     revert H; (*clear;*) intros H.
-     (*  all paths cross frontier -> all paths cross frontier' *)
-     intros p Hp; specialize (H p Hp).
-     elim H; intros.
-     (* the things taken out of frontier are not in unexpanded: red H8 or red i *)
-     admit.
-    } destruct (node_in_dec d' unexpanded). {
-      replace d' with u in * by admit.
-      specialize (H s' Hs' u). destruct (node_in_dec u unexpanded); [|pv].
-      subst. simpl. destruct (node_eq_dec u u); [|pv]. destruct pu; simpl in *.
-      admit.
-    } {
-      eapply H3.
-    }
+    destruct (node_eq_dec u d).
+    Focus 2.
+      destruct (node_in_dec d unexpanded);
+        [assert (In d unexpanded') by (eapply remove_preserves; eauto);
+         destruct (node_in_dec d unexpanded'); [|pv]
+        |
+         assert (~ In d unexpanded') by (eapply remove_does_not_add; eauto);
+         destruct (node_in_dec d unexpanded'); [pv|]]; revert H; intro H.
+       Focus 2.
 Qed.
