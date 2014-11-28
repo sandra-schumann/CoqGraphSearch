@@ -87,6 +87,20 @@ Proof.
   right. apply IHps. apply H2.
 Qed.
 
+Lemma lookup_in : forall {A:Type} ps x (y:A),
+  lookup ps x = Some y -> In (x, y) ps.
+Proof.
+  intros. rename H into H0.
+  unfold lookup in *.
+  remember (find (fun p => node_eq_decb x (fst p)) ps)
+  as findps. destruct findps; inversion H0. subst.
+  induction ps. discriminate.
+  simpl in *. unfold node_eq_decb in *.
+  destruct (node_eq_dec x (fst a)).
+  inversion Heqfindps. subst. destruct a. left; crush.
+  right. crush.
+Qed.
+
 Lemma lookup_corr : forall ps, NoDup (keys ps) ->
     forall x y, lookup ps x = Some y <-> In (x, y) ps.
 Proof.
@@ -95,7 +109,7 @@ Proof.
   remember (find (fun p : node * list node => node_eq_decb x (fst p)) ps)
   as findps. destruct findps; inversion H0. subst.
   induction ps. discriminate.
-  simpl in H. clear H0. SearchAbout (NoDup _).
+  simpl in H. clear H0.
   remember (NoDup_remove_1 [] _ _ H) as H1. simpl in H1.
   remember (IHps H1) as H2.
   simpl in Heqfindps. remember (node_eq_decb x (fst a)) as xisfsta.
@@ -312,6 +326,8 @@ Lemma closestUnexpanded_corr : forall f unexpanded frontier,
 Proof.
   intros. remember (closestUnexpanded f unexpanded frontier) as oret.
   destruct oret.
+
+  induction frontier; crush.
 Admitted.
 
 Lemma remove_does_not_add : forall (u:node) (xs:list node) (ys:list node),
