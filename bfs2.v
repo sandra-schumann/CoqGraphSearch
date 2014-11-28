@@ -496,6 +496,25 @@ Fixpoint traceParent
            end
   end.
 
+Lemma parents_dont_disappear: forall parent parent' pu u d p,
+  (u,pu)::parent = parent' -> u <> d -> traceParent parent d = Some p ->
+  traceParent parent' d = Some p.
+Proof.
+  induction parent; intros; [crush|].
+  destruct a. unfold traceParent in H1.
+  destruct (node_eq_dec d n).
+  fold traceParent in H1. destruct p0; crush.
+  destruct (node_eq_dec n u); crush.
+  destruct (node_eq_dec n n); crush.
+  fold traceParent in H1. remember (traceParent parent d) as dpar.
+  destruct dpar.
+  subst. unfold traceParent.
+  destruct (node_eq_dec d u); [crush|].
+  destruct (node_eq_dec d n); [crush|].
+  fold traceParent. remember (traceParent parent d) as dpar. destruct dpar.
+  subst. crush. crush. crush.
+Qed.
+
 Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
 | IdPath : forall g s, reachableUsing g s s []
 | ConsPath : forall g s d p,               reachableUsing g s d    p   ->
