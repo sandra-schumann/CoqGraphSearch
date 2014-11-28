@@ -8,6 +8,7 @@ Require Import Coq.Arith.Le.
 Require Import Recdef.
 Require Import Coq.Arith.Peano_dec.
 Require Import Coq.Arith.Compare_dec.
+Require Import Coq.omega.Omega.
 Import ListNotations.
 
 Inductive node := Node : nat -> node.
@@ -16,7 +17,14 @@ Definition node_eq_dec : forall (x y:node), {x = y} + {x <> y}.
   decide equality. apply eq_nat_dec.
 Defined.
 Definition node_eq_decb a b := if node_eq_dec a b then true else false.
-Lemma node_eq_decb_corr : forall a b, a = b <-> node_eq_decb a b = true. Admitted.
+
+Lemma node_eq_decb_corr : forall a b, a = b <-> node_eq_decb a b = true.
+Proof.
+  intros; split; intro H; unfold node_eq_decb in *;
+  remember (node_eq_dec a b) as aisb; destruct aisb; auto.
+  inversion H.
+Qed.
+
 Definition node_in_dec := in_dec node_eq_dec.
 
 Definition adj := (node * list node)%type.
@@ -32,16 +40,110 @@ Definition lookup {A:Type} (ps:list(node*A)) (x:node) :=
     | Some p => Some (snd p)
     | None => None
     end.
+
+Ltac myinj H := injection H; clear H; intros; try subst.
+
+Ltac mysimp := intros;
+  match goal with 
+    | [ H : _ /\ _ |- _ ] => destruct H
+    | [ H : None = Some _ |- _ ] => inversion H ; clear H ; subst
+    | [ H : Some _ = None |- _ ] => inversion H ; clear H ; subst
+    | [ H : Some _ = Some _ |- _ ] => myinj H
+    | [ H : (_, _) = (_, _) |- _ ] => myinj H
+    | [ H : context[(fst ?x, snd ?x)] |- _ ] => destruct x
+    | [ H : ?x <> ?x |- _ ] => destruct H
+    | [ H : ?x = (_, _) |- _ ] => destruct x
+  end.
+
+Ltac pve :=
+  match goal with 
+    | [ H : _ |- _ ] => assumption
+    | [ H : False |- _ ] => destruct H
+    | [ H : ?P, H' : ~?P |- _ ] => destruct (H' H)
+    | [ H : context[node_eq_dec ?x ?y] |- _ ] => destruct (node_eq_dec x y); repeat (mysimp; simpl in *; subst; eauto)
+    | [ H : ?A |- ?A /\ _  ] => split; [apply A|]
+    | [ H : ?A |- _  /\ ?A ] => split; [|apply A]
+    | [ H : ?A |- ?A \/  _ ] => left; apply A
+    | [ H : ?A |-  _ \/ ?A ] => right; apply A
+    | [ H : context[let (_, _) := ?x in _] |- _ ] => destruct x
+    (*| [ H : (match ?x with _ => Some _ | _ => None end = Some _) |- _ ] => destruct x*)
+  end.
+
+Ltac pv := repeat (
+  intros; simpl in *;
+  intros; try pve;
+  intros; try mysimp;
+  intros; eauto).
+
+Lemma in_fst_in_keys :
+  forall x y ps, In (x, y) ps -> In x (keys ps).
+Proof.
+  intros. induction ps.
+  inversion H.
+  simpl in *. destruct H as [H1 | H2].
+  left. destruct a. inversion H1. subst. simpl. reflexivity.
+  right. apply IHps. apply H2.
+Qed.
+
 Lemma lookup_corr : forall ps, NoDup (keys ps) ->
     forall x y, lookup ps x = Some y <-> In (x, y) ps.
-Admitted.
+Proof.
+  intros; split; intro H0.
+  unfold lookup in *.
+  remember (find (fun p : node * list node => node_eq_decb x (fst p)) ps)
+  as findps. destruct findps; inversion H0. subst.
+  induction ps. discriminate.
+  simpl in H. clear H0. SearchAbout (NoDup _).
+  remember (NoDup_remove_1 [] _ _ H) as H1. simpl in H1.
+  remember (IHps H1) as H2.
+  simpl in Heqfindps. remember (node_eq_decb x (fst a)) as xisfsta.
+  destruct xisfsta.
+  myinj Heqfindps.
+  symmetry in Heqxisfsta.
+  destruct (node_eq_decb_corr x (fst a)) as [_ H1].
+  rewrite (H1 Heqxisfsta) in *.
+  simpl. left. destruct a. reflexivity.
+  simpl. right. apply H2. auto.
+  unfold lookup.
+  induction ps. inversion H0.
+  simpl in *. destruct H0 as [H1 | H2].
+  subst. simpl. unfold node_eq_decb.
+  remember (node_eq_dec x x) as xisx. destruct xisx.
+  auto. destruct n. reflexivity.
+  remember (NoDup_remove_1 [] _ _ H) as H3. simpl in H3.
+  unfold node_eq_decb. remember (node_eq_dec x (fst a)) as xisa.
+  destruct xisa. subst. SearchAbout (NoDup _).
+  remember (NoDup_remove_2 [] _ _ H) as H1. simpl in H1.
+  remember (H1 (in_fst_in_keys _ _ _ H2)) as F. inversion F.
+  apply IHps. auto. auto.
+Qed.
 
 Definition hasEdge (g:graph) u v := exists vs, lookup g u = Some vs /\ In v vs.
 
-Lemma remove_length : forall v vs, In v vs -> length vs = S (length (remove node_eq_dec v vs)).
-Admitted.
+Lemma remove_length' : forall v vs, length vs >= length (remove node_eq_dec v vs) /\
+  (In v vs -> length vs > length (remove node_eq_dec v vs)).
+Proof.
+  intros; induction vs; split; intros; auto.
+  inversion H.
+  simpl. destruct IHvs as [H1 H2].
+  remember (node_eq_dec v a) as visa. destruct visa; simpl; omega.
+  simpl. destruct IHvs as [H1 H2]. destruct H as [H3 | H4].
+  remember (node_eq_dec v a) as visa. destruct visa; simpl.
+  omega.
+  subst. destruct n. auto.
+  remember (node_eq_dec v a) as visa. destruct visa; simpl.
+  omega.
+  remember (H2 H4) as H5. omega.
+Qed.
 
-Fixpoint extractMin (f:found->nat) (frontier : list found) : option (found * list found) :=
+Lemma remove_length : forall v vs, In v vs ->
+  length vs > length (remove node_eq_dec v vs).
+Proof.
+  intros v vs. apply remove_length'.
+Qed.
+
+Fixpoint extractMin (f:found->nat) (frontier : list found) :
+  option (found * list found) :=
     match frontier with
     | nil => None
     | p::frontier' =>
@@ -89,8 +191,8 @@ Admitted.
 Definition insert {A:Type} (x:A) (xs:list A) := x::xs.
 
 Function bfs
-    (g:graph) (unexpanded:list node) (frontier : list found) (parent : list found)
-    {measure length unexpanded}
+    (g:graph) (unexpanded:list node) (frontier : list found)
+    (parent : list found) {measure length unexpanded}
     : list found
     :=
     match closestUnexpanded foundPathLen unexpanded frontier with
