@@ -595,8 +595,9 @@ Lemma bfs_corr:
     forall v parentPointer l, lookup frontier v = Some (parentPointer, l) ->
       In v unexpanded /\
       match parentPointer with
-      | None => v = s /\ l = 1
-      | Some u => exists p, traceParent parent u = Some p /\ shortestPath g s v (v::p)
+      | None => v = s /\ l = 0
+      | Some u => exists p,
+          traceParent parent u = Some p /\ shortestPath g s v (v::p) /\ length (v::p) = l
       end
   ) /\ (
     forall v p, traceParent parent v = Some p -> ~ In v unexpanded
