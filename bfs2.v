@@ -35,7 +35,7 @@ Definition found := (node * (option node*nat))%type.
 Definition foundPathLen (p:found) : nat := snd (snd p).
 
 (** keys g gives all the first parts of adjs in a graph g (list of nodes) **)
-Definition keys := map (@fst node (list node)).
+Definition keys {A:Type} := map (@fst node A).
 
 Definition lookup {A:Type} (ps:list(node*A)) (x:node) :=
     match find (fun p => node_eq_decb x (fst p)) ps with
@@ -44,6 +44,9 @@ Definition lookup {A:Type} (ps:list(node*A)) (x:node) :=
     end.
 
 Ltac myinj H := injection H; clear H; intros; try subst.
+Ltac myinj' H :=
+  injection H;
+  repeat (let Heq := fresh "Heq" in intro Heq; rewrite Heq in *; clear Heq; simpl in *).
 
 Ltac mysimp := intros;
   match goal with 
@@ -80,7 +83,7 @@ Ltac pv := repeat (
   intros; eauto).
 
 Lemma in_fst_in_keys :
-  forall x y ps, In (x, y) ps -> In x (keys ps).
+  forall {A:Type} x (y:A) ps, In (x, y) ps -> In x (keys ps).
 Proof.
   intros. induction ps.
   inversion H.
@@ -103,8 +106,8 @@ Proof.
   right. crush.
 Qed.
 
-Lemma in_lookup : forall ps, NoDup (keys ps) ->
-    forall x y, In (x, y) ps -> lookup ps x = Some y.
+Lemma in_lookup : forall {A:Type} ps, NoDup (keys ps) ->
+    forall x (y:A), In (x, y) ps -> lookup ps x = Some y.
 Proof.
   intros.
   unfold lookup.
@@ -121,8 +124,13 @@ Proof.
   apply IHps. auto. auto.
 Qed.
 
-Lemma lookup_corr : forall ps, NoDup (keys ps) ->
-    forall x y, lookup ps x = Some y <-> In (x, y) ps.
+Lemma in_lookup' : forall {A:Type} ps,
+    forall x (y:A), In (x, y) ps ->
+    exists y', lookup ps x = Some y'.
+Admitted.
+
+Lemma lookup_corr : forall {A:Type} ps, NoDup (keys ps) ->
+    forall x (y:A), lookup ps x = Some y <-> In (x, y) ps.
 Proof.
   intros. split. apply lookup_in. apply in_lookup; crush.
 Qed.
@@ -553,7 +561,7 @@ Fixpoint traceParent
            | None => Some nil
            | Some u => match traceParent parent' u with
                        | None => None
-                       | Some path => Some (u::path)
+                       | Some path => Some (v::path)
                        end
            end
       else match traceParent parent' v with
@@ -584,7 +592,7 @@ Qed.
 Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
 | IdPath : forall g s, reachableUsing g s s []
 | ConsPath : forall g s d p,               reachableUsing g s d    p   ->
-             forall d', hasEdge g d d' ->  reachableUsing g s d' (d::p).
+             forall d', hasEdge g d d' ->  reachableUsing g s d' (d'::p).
 
 Lemma removing_corr_item : forall x xs xs',
   remove node_eq_dec x xs = xs' ->
@@ -592,54 +600,206 @@ Lemma removing_corr_item : forall x xs xs',
 Proof.
 Admitted.
 
+Lemma not_None : forall {A:Type} (sx:option A), sx <> None -> exists x, sx = Some x.
+  intros. destruct sx; [|congruence]. eauto.
+Qed.
+
+Notation shortestPath g s d p := (
+  reachableUsing g s d p
+  /\
+  (forall p', reachableUsing g s d p' -> length p' >= length p)).
+
 Lemma bfs_corr:
-  forall (start:list node),
-  forall (g:graph) (unexpanded:list node) (frontier:list found) (parent:list found),
+  forall (g:graph) (s:node),
+  forall (unexpanded:list node) (frontier:list found) (parent:list found),
   ((
-    forall (d:node),
+    forall (d:node) (p':list node), reachableUsing g s d p' ->
       if node_in_dec d unexpanded
-      then forall s' p', In s' start -> reachableUsing g s' d p' ->
-           exists v, In v p' -> lookup frontier v <> None
-      else forall s' p', In s' start -> reachableUsing g s' d p' ->
-           exists s  p,  In s  start /\ reachableUsing g s  d p /\
-             traceParent parent d = Some p /\ length p' >= length p
+      then exists p_in v p_out, p' = p_in ++ v::p_out
+           /\ (forall w, In w (v::p_out) -> In w unexpanded)
+           /\ exists vp, lookup frontier v = Some vp
+      else exists p, traceParent parent d = Some p /\ shortestPath g s d p
   ) /\ (
     forall v parentPointer l, lookup frontier v = Some (parentPointer, l) ->
       match parentPointer with
-      | None => In v start
-      | Some u => hasEdge g u v /\
-                  (exists s p, In s start /\ reachableUsing g s u p /\
-                  traceParent parent u = Some p /\ length p = l)
+      | None => v = s /\ l = 0
+      | Some u => exists p,
+          traceParent parent u = Some p /\ shortestPath g s v (v::p) /\ length (v::p) = l
       end
-      (* we probably don't need another copy of this claim for parent because
-        [reachableUsing] already requires that the edge exists *)
+  ) /\ (
+    forall v p, traceParent parent v = Some p -> ~ In v unexpanded
+  ) /\ (
+    sorted foundPathLen frontier
   ) /\ (
     forall v, In v unexpanded -> In v (keys g)
   ))
     -> forall ret, bfs g unexpanded frontier parent = ret ->
   ((
-    forall d,
-    forall s' p', In s' start -> reachableUsing g s' d p' ->
-    exists s  p , In s  start /\ reachableUsing g s  d p /\
-      traceParent ret d = Some p /\ length p' >= length p
+    forall (d:node) (p':list node), reachableUsing g s d p' ->
+    exists p, traceParent ret d = Some p /\ shortestPath g s d p
   ))
 .
   intros until parent.
-  functional induction (bfs g unexpanded frontier parent).
-  Focus 1. admit.
-  intros.
-  eelim IHl; clear IHl; repeat split; [..|eauto]; auto; splitHs;
+  functional induction (bfs g unexpanded frontier parent). Focus 2.
+  intros; eelim IHl; clear IHl; repeat split; [..|eauto]; auto; splitHs;
     [intro x; exists x; subst; assumption|..];
-    clear dependent d; clear dependent s'; clear dependent p'.
-  Focus 1. expandBFS.
-    intros d; specialize (H d).
-    destruct (node_eq_dec u d).
+  rename H2 into HfrontierParents;
+  rename H3 into HparentExpanded;
+  rename H4 into HfrontierSorted;
+  rename H5 into HunexpandedNodes;
+  clear dependent p'; clear dependent d; clear dependent ret.
+
+  {
+  expandBFS.
+    rename H0 into HparentPrepend;
+    rename H1 into HfrontierInsert;
+    rename H2 into HfrontierRemove.
+
+  remember H as Hd; clear HeqHd.
+  intros d p' Hp'; specialize (Hd _ _ Hp').
+  destruct (node_in_dec d unexpanded).
+
+  Focus 2.
+    destruct (node_in_dec d unexpanded');
+      [assert (~ In d unexpanded') by (eapply remove_does_not_add; eauto); pv|].
+    assert (In u unexpanded) by (
+      specialize (closestUnexpanded_corr foundPathLen unexpanded frontier HfrontierSorted);
+      destruct (closestUnexpanded foundPathLen unexpanded frontier); [|pv]; intro Hc;
+      elim Hc; clear Hc; intros; splitHs; crush).
+    assert (d <> u) by crush.
+    elim Hd; intros p Hp; exists p; destruct Hp.
+    split; [apply (parents_dont_disappear parent parent' _ _ d p HparentPrepend)|]; auto;
+  fail "end Focus 2".
+
+  specialize (closestUnexpanded_corr foundPathLen unexpanded frontier HfrontierSorted);
+  destruct (closestUnexpanded foundPathLen unexpanded frontier); [|pv]; intro Hc;
+  elim Hc; clear Hc; intros; splitHs.
+  destruct p; destruct f; myinj' Heqc. destruct p.
+  destruct (node_eq_dec u d);
+    [destruct (node_in_dec d unexpanded');
+      [(specialize (remove_In node_eq_dec unexpanded d); crush)|]
+    | destruct (node_in_dec d unexpanded');
+      [|specialize (remove_preserves _ _ _ HfrontierRemove d); crush]].
+  {
+    rewrite <- e in *; clear e d.
+    rename x into discarded.
+    assert (forall x, In x discarded -> fst x <> u) by (
+      intros x Hdiscarded; specialize (H1 x Hdiscarded);
+      eapply in_notin_notsame; eauto).
+    assert (lookup frontier u = Some pu) as Hlookup_u by (
+      subst; eapply lookup_head; eauto).
+    elim Hd; clear Hd; intros v Hv.
+    destruct Hv as [HvInp' [HvUnexpanded Hlookup_v]];
+      elim Hlookup_v; clear Hlookup_v; intros pv Hlookup_v.
+    destruct pu as [[u_parent|] lu];
+        generalize (HfrontierParents _ _ _ Hlookup_u); intro; splitHs.
+    Focus 2. subst; exists []; simpl; destruct (node_eq_dec s s); repeat split;
+      [constructor
+      |intros; destruct p'0; simpl; omega
+      |congruence
+      |constructor
+      |intros; destruct p'0; simpl; omega
+      ];
+    fail "end Focus 2".
+    destruct pv as [vpp lv];
+        generalize (HfrontierParents _ _ _ Hlookup_v) as Hv_parent; intro.
+    unfold foundPathLen in *; simpl in *.
+    assert (~ In (v,(vpp,lv)) discarded) by
+      admit.
+    assert (In (v,(vpp,lv)) ((u, (Some u_parent, lu)) :: frontierRemaining)) as HvI by
+      admit.
+    assert (lv >= lu) by
+      admit.
+    elim H5; clear H5; intros p Hp; exists (u::p).
+    splitHs; repeat split; auto.
+    revert H6; subst. simpl. destruct (node_eq_dec u u); [|crush].
+    destruct (traceParent parent u_parent); [|congruence]. intro. myinj H5. auto.
+  } {
+    elim Hd; intro v; intro Hv; destruct Hv as [Hvp [HvUnexpanded Hv]].
+    assert (exists ff, lookup frontier v = Some ff) as HexSome by
+      (destruct (lookup frontier v) as [px|]; [exists px; auto|congruence]).
+    elim HexSome; clear HexSome; intros res Hres.
+    remember (lookup_in frontier v res Hres) as Hin; clear HeqHin.
+    remember Hin as HinFrontier; clear HeqHinFrontier.
+    rewrite H0 in Hin; destruct (in_app_or _ _ (v, res) Hin) as [Hswh|Hswh]. {
+      specialize (H1 (v, res) Hswh); simpl in *.
+      destruct res; remember (HfrontierParents _ _ _ Hres) as Hr; clear HeqHr.
+    } simpl Hswh; destruct Hswh.
+    Focus 2.
+      exists v. split; [auto|].
+      assert (In (v, res) frontier') as HinFrontier' by
+        admit.
+      elim (in_lookup' frontier' v res HinFrontier'); intros.
+      exists x0; trivial;
+    fail "end Focus1".
+    symmetry in H4; myinj' H4; clear H4 v Hv.
+    assert (exists v, In v p' /\ hasEdge g u v) as Hnext by
+      admit.
+    elim Hnext; clear Hnext; intros v Hv.
+    exists v. splitHs; split; auto.
+    exists (Some u, S (foundPathLen (u, pu))).
+    rewrite <- HfrontierInsert.
+    assert (lookup g u = Some neighbors -> hasEdge g u v -> In v neighbors) by
+      admit.
+    admit.
+    }
+  }
+
+      (* end of reasonable region *)
+
+
+  (*
+      elim (in_lookup' frontier _ _ HinFrontier); intros res' H12;
+        destruct res' as [[u'|] lv].
+      destruct (H3 _ _ _ H12) as [_ Hupto].
+      destruct parentPointer
+
+
+       elim H; clear H; intros v H; exists v; intro Hv; specialize (H Hv).
+       subst.
+       Focus 2.
+       elim H; clear H; intros s H; exists s.
+       elim H; clear H; intros p H; exists p.
+  *)
+
+         (* probably bogus attempt at length p' >= length (u_parent :: p)
+         assert (~ In u_parent unexpanded) by (apply (HparentExpanded u_parent p); auto).
+         generalize (Hcopy u_parent); destruct (node_in_dec u_parent unexpanded); [pv|].
+         intro H'.
+         rewrite H10 in H'.
+         assert (forall s'' p'', In s'' start -> reachableUsing g s'' u_parent p'' ->
+          length p'' >= length p
+         ). {
+           intros s'' p'' Hs'' Hp''; elim (H' s'' p'' Hs'' Hp''); clear H'.
+           intros s_ H'; elim H'; clear H'; intros p_; intros.
+           splitHs.
+           replace p_ with p in * by
+              (destruct (list_eq_dec node_eq_dec p p_); congruence).
+           auto.
+         }
+         generalize dependent p'.
+         generalize dependent s'.
+        *)
+
+  (*
+    replace d with u in *; subst.
+    assert (~ In u (remove node_eq_dec u unexpanded)) by (apply remove_In);
+      destruct (node_in_dec u (remove node_eq_dec u unexpanded)); [pv|].
+    Check (closestUnexpanded_corr foundPathLen unexpanded frontier).
+    destruct (node_in_dec d unexpanded); [|pv].
+  *)
+  (*
     Focus 2.
       destruct (node_in_dec d unexpanded);
-        [assert (In d unexpanded') by (eapply remove_preserves; eauto);
-         destruct (node_in_dec d unexpanded'); [|pv]
-        |
-         assert (~ In d unexpanded') by (eapply remove_does_not_add; eauto);
-         destruct (node_in_dec d unexpanded'); [pv|]]; revert H; intro H.
+        [assert (In d unexpanded') by (eapply remove_preserves; eauto)
+        |assert (~ In d unexpanded') by (eapply remove_does_not_add; eauto)];
+       destruct (node_in_dec d unexpanded'); try solve [pv];
+       intros s' p' Hs' Hp'; specialize (H s' p' Hs' Hp');
+       revert H; intro H.
+       elim H; clear H; intros v H; exists v; intro Hv; specialize (H Hv).
        Focus 2.
+       elim H; clear H; intros s H; exists s.
+       elim H; clear H; intros p H; exists p.
+       splitHs; repeat split; try assumption.
+   *)
 Qed.
