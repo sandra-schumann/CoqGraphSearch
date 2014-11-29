@@ -684,54 +684,31 @@ Lemma bfs_corr:
     assert (lv >= lu) by
       admit.
     elim H6; clear H6; intros p Hp; exists (u::p).
-    splitHs; split. revert H6; subst. simpl. destruct (node_eq_dec u u); [|crush].
+    splitHs; repeat split; auto.
+    revert H6; subst. simpl. destruct (node_eq_dec u u); [|crush].
     destruct (traceParent parent u_parent); [|congruence]. intro. myinj H6. auto.
-    simpl.
-
-     (* bogus from here? *)
-    simpl in HvI; destruct HvI as [HvI|HvI].
-    { myinj' HvI; clear HvI. econstructor.
-      Focus 2. 
-        destrvct (node_eq_dec v v); try congrvence;
-      fail "end Focvs 2".
-      assert (foundPathLen (v, pv) >= foundPathLen (u, pu)) by
-        admit.
-      Focus 1.
-        elim H8; clear H8; intros s H8;
-        elim H8; clear H8; intros p H8;
-        splitHs.
-        exists s; exists (u_parent::p).
-        splitHs; repeat split; auto; try econstructor; auto.
-        Focus 1.
-          rewrite <- HparentPrepend; simpl.
-          destruct (node_eq_dec u u); [clear e|congruence].
-          rewrite H10; auto;
-        fail "- - end Focus 1".
-        simpl; rewrite H11.
-      fail "- end Focus 1".
+  } {
+    elim Hd; intro v; intro Hv; destruct Hv as [Hvp Hv].
+    assert (exists ff, lookup frontier v = Some ff) as HexSome by
+      (destruct (lookup frontier v) as [px|]; [exists px; auto|congruence]);
+    elim HexSome; clear HexSome; intros res Hres.
+    remember (lookup_in frontier v res Hres) as Hin; clear HeqHin.
+    remember Hin as HinFrontier; clear HeqHinFrontier.
+    rewrite H0 in Hin; destruct (in_app_or _ _ (v, res) Hin) as [Hswh|Hswh]. {
+      specialize (H1 (v, res) Hswh); simpl in *.
+      destruct res; destruct (HfrontierParents _ _ _ Hres) as [Hunexpanded _]; pv.
+    } simpl Hswh; destruct Hswh.
+    Focus 2.
+      exists v. split; [auto|].
+      assert (In (v, res) frontier') as HinFrontier' by admit.
+      elim (in_lookup' frontier' v res HinFrontier'); intros.
+      exists x0; trivial;
+    fail "end Focus1".
+    symmetry in H4; myinj' H4; clear H4.
+    destruct pu as [[v_parent|] vl]; destruct (HfrontierParents _ _ _ Hres).
+    elim H11; clear H11; intros v_path Hv_path; splitHs.
+    subst.
     }
-    {
-      elim Hd; intro v; intro Hv; destruct Hv as [Hvp Hv].
-      assert (exists ff, lookup frontier v = Some ff) as HexSome by
-        (destruct (lookup frontier v) as [px|]; [exists px; auto|congruence]);
-      elim HexSome; clear HexSome; intros res Hres.
-      remember (lookup_in frontier v res Hres) as Hin; clear HeqHin.
-      remember Hin as HinFrontier; clear HeqHinFrontier.
-      rewrite H0 in Hin; destruct (in_app_or _ _ (v, res) Hin) as [Hswh|Hswh]. {
-        specialize (H1 (v, res) Hswh); simpl in *.
-        destruct res; destruct (HfrontierParents _ _ _ Hres) as [Hunexpanded _]; pv.
-      } simpl Hswh; destruct Hswh.
-      Focus 2.
-        exists v. split; [auto|].
-        assert (In (v, res) frontier') as HinFrontier' by admit.
-        elim (in_lookup' frontier' v res HinFrontier'); intros.
-        exists x0; trivial;
-      fail "end Focus1".
-      symmetry in H4; myinj' H4; clear H4.
-      destruct pu as [[v_parent|] vl]; destruct (HfrontierParents _ _ _ Hres).
-      elim H11; clear H11; intros v_path Hv_path; splitHs.
-      subst.
-      }
     }
 
       (* end of reasonable region *)
