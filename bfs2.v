@@ -589,11 +589,12 @@ Lemma bfs_corr:
   ((
     forall (d:node) (p':list node), reachableUsing g s d p' ->
       if node_in_dec d unexpanded
-      then exists v, In v p' /\ exists vp, lookup frontier v = Some vp
+      then exists p_in v p_out, p' = p_in ++ v::p_out
+           /\ (forall w, In w (v::p_out) -> In w unexpanded)
+           /\ exists vp, lookup frontier v = Some vp
       else exists p, traceParent parent d = Some p /\ shortestPath g s d p
   ) /\ (
     forall v parentPointer l, lookup frontier v = Some (parentPointer, l) ->
-      In v unexpanded /\
       match parentPointer with
       | None => v = s /\ l = 0
       | Some u => exists p,
@@ -662,7 +663,8 @@ Lemma bfs_corr:
     assert (lookup frontier u = Some pu) as Hlookup_u by (
       subst; eapply lookup_head; eauto).
     elim Hd; clear Hd; intros v Hv.
-    destruct Hv as [HvInp' Hlookup_v]; elim Hlookup_v; clear Hlookup_v; intros pv Hlookup_v.
+    destruct Hv as [HvInp' [HvUnexpanded Hlookup_v]];
+      elim Hlookup_v; clear Hlookup_v; intros pv Hlookup_v.
     destruct pu as [[u_parent|] lu];
         generalize (HfrontierParents _ _ _ Hlookup_u); intro; splitHs.
     Focus 2. subst; exists []; simpl; destruct (node_eq_dec s s); repeat split;
@@ -674,8 +676,7 @@ Lemma bfs_corr:
       ];
     fail "end Focus 2".
     destruct pv as [vpp lv];
-        generalize (HfrontierParents _ _ _ Hlookup_v) as Hv_parent;
-          intro; destruct Hv_parent as [HvUnexpanded Hvpp].
+        generalize (HfrontierParents _ _ _ Hlookup_v) as Hv_parent; intro.
     unfold foundPathLen in *; simpl in *.
     assert (~ In (v,(vpp,lv)) discarded) by
       admit.
@@ -683,20 +684,20 @@ Lemma bfs_corr:
       admit.
     assert (lv >= lu) by
       admit.
-    elim H6; clear H6; intros p Hp; exists (u::p).
+    elim H5; clear H5; intros p Hp; exists (u::p).
     splitHs; repeat split; auto.
     revert H6; subst. simpl. destruct (node_eq_dec u u); [|crush].
-    destruct (traceParent parent u_parent); [|congruence]. intro. myinj H6. auto.
+    destruct (traceParent parent u_parent); [|congruence]. intro. myinj H5. auto.
   } {
-    elim Hd; intro v; intro Hv; destruct Hv as [Hvp Hv].
+    elim Hd; intro v; intro Hv; destruct Hv as [Hvp [HvUnexpanded Hv]].
     assert (exists ff, lookup frontier v = Some ff) as HexSome by
-      (destruct (lookup frontier v) as [px|]; [exists px; auto|congruence]);
+      (destruct (lookup frontier v) as [px|]; [exists px; auto|congruence]).
     elim HexSome; clear HexSome; intros res Hres.
     remember (lookup_in frontier v res Hres) as Hin; clear HeqHin.
     remember Hin as HinFrontier; clear HeqHinFrontier.
     rewrite H0 in Hin; destruct (in_app_or _ _ (v, res) Hin) as [Hswh|Hswh]. {
       specialize (H1 (v, res) Hswh); simpl in *.
-      destruct res; destruct (HfrontierParents _ _ _ Hres) as [Hunexpanded _]; pv.
+      destruct res; remember (HfrontierParents _ _ _ Hres) as Hr; clear HeqHr.
     } simpl Hswh; destruct Hswh.
     Focus 2.
       exists v. split; [auto|].
