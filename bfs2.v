@@ -562,6 +562,12 @@ Proof.
   fold traceParent. remember (traceParent parent d) as dpar. destruct dpar.
   subst. crush. crush. crush.
 Qed.
+    
+Lemma HextendFrontier : forall ws (v:node) neighbors,
+  (exists pre v' post, ws++[v]=post++v'::pre /\ In v' neighbors /\ (forall w, In w post -> ~In w neighbors))
+  \/
+  (~In v neighbors /\ forall w, In w ws -> ~In w neighbors).
+Admitted.
 
 Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
 | IdPath : forall g s, reachableUsing g s s []
@@ -589,8 +595,9 @@ Lemma bfs_corr:
   ((
     forall (d:node) (p':list node), reachableUsing g s d p' ->
       if node_in_dec d unexpanded
-      then exists p_in v p_out, p' = p_in ++ v::p_out
-           /\ (forall w, In w (v::p_out) -> In w unexpanded)
+      then exists p_in v p_out, p' = p_out ++ v::p_in
+           /\ In v unexpanded
+           /\ (forall w, In w (p_out) -> In w unexpanded)
            /\ exists vp, lookup frontier v = Some vp
       else exists p, traceParent parent d = Some p /\ shortestPath g s d p
   ) /\ (
@@ -627,7 +634,7 @@ Lemma bfs_corr:
   expandBFS.
     rename H0 into HparentPrepend;
     rename H1 into HfrontierInsert;
-    rename H2 into HfrontierRemove.
+    rename H2 into HunepandedRemove.
 
   remember H as Hd; clear HeqHd.
   intros d p' Hp'; specialize (Hd _ _ Hp').
@@ -647,133 +654,103 @@ Lemma bfs_corr:
 
   specialize (closestUnexpanded_corr foundPathLen unexpanded frontier HfrontierSorted);
   destruct (closestUnexpanded foundPathLen unexpanded frontier); [|pv]; intro Hc;
-  elim Hc; clear Hc; intros; splitHs.
+  elim Hc; clear Hc; intros discarded Hc.
+  destruct Hc as [Hfrontier_split [HdiscardedExpanded [HextractMin HminUnexpanded]]].
   destruct p; destruct f; myinj' Heqc. destruct p.
   destruct (node_eq_dec u d);
     [destruct (node_in_dec d unexpanded');
       [(specialize (remove_In node_eq_dec unexpanded d); crush)|]
     | destruct (node_in_dec d unexpanded');
-      [|specialize (remove_preserves _ _ _ HfrontierRemove d); crush]].
+      [|specialize (remove_preserves _ _ _ HunepandedRemove d); crush]].
   {
     rewrite <- e in *; clear e d.
-    rename x into discarded.
     assert (forall x, In x discarded -> fst x <> u) by (
-      intros x Hdiscarded; specialize (H1 x Hdiscarded);
-      eapply in_notin_notsame; eauto).
+      intros x Hdiscarded; eapply in_notin_notsame; eauto).
     assert (lookup frontier u = Some pu) as Hlookup_u by (
       subst; eapply lookup_head; eauto).
-    elim Hd; clear Hd; intros v Hv.
-    destruct Hv as [HvInp' [HvUnexpanded Hlookup_v]];
-      elim Hlookup_v; clear Hlookup_v; intros pv Hlookup_v.
+    elim Hd; clear Hd; intros p_in  Hd;
+    elim Hd; clear Hd; intros v     Hd;
+    elim Hd; clear Hd; intros p_out Hd.
+    destruct Hd as [Hp_split [HvUnexpanded [HwUnexpanded Hlookup_v]]].
+    elim Hlookup_v; clear Hlookup_v; intros vp Hlookup_v.
     destruct pu as [[u_parent|] lu];
-        generalize (HfrontierParents _ _ _ Hlookup_u); intro; splitHs.
-    Focus 2. subst; exists []; simpl; destruct (node_eq_dec s s); repeat split;
+        generalize (HfrontierParents _ _ _ Hlookup_u); intro Hu_parent.
+    Focus 2. splitHs; subst; exists []; simpl; destruct (node_eq_dec s s); repeat split;
       [constructor
-      |intros; destruct p'0; simpl; omega
+      |intros; destruct p'; simpl; omega
       |congruence
       |constructor
-      |intros; destruct p'0; simpl; omega
+      |intros; destruct p'; simpl; omega
       ];
     fail "end Focus 2".
-    destruct pv as [vpp lv];
+    destruct vp as [vpp lv].
         generalize (HfrontierParents _ _ _ Hlookup_v) as Hv_parent; intro.
-    unfold foundPathLen in *; simpl in *.
-    assert (~ In (v,(vpp,lv)) discarded) by
-      admit.
-    assert (In (v,(vpp,lv)) ((u, (Some u_parent, lu)) :: frontierRemaining)) as HvI by
-      admit.
+    remember (lookup_in frontier v _  Hlookup_v) as HIn; clear HeqHIn.
+    (* todo: separate this out *)
+    rewrite Hfrontier_split in HIn; rename HIn into HIn';
+      destruct (in_app_or _ _ (v, _) HIn') as [HIn|HIn]; clear HIn'. {
+      specialize (HdiscardedExpanded (v, _) HIn); simpl in *.
+      specialize (HfrontierParents _ _ _ Hlookup_v); crush.
+    } 
+    (* *)
     assert (lv >= lu) by
       admit.
-    elim H5; clear H5; intros p Hp; exists (u::p).
+    elim Hu_parent; clear Hu_parent; intros p Hp; exists (u::p).
     splitHs; repeat split; auto.
-    revert H6; subst. simpl. destruct (node_eq_dec u u); [|crush].
-    destruct (traceParent parent u_parent); [|congruence]. intro. myinj H5. auto.
+    subst. simpl. destruct (node_eq_dec u u); [|crush].
+    destruct (traceParent parent u_parent); [|congruence]. pv.
   } {
-    elim Hd; intro v; intro Hv; destruct Hv as [Hvp [HvUnexpanded Hv]].
-    assert (exists ff, lookup frontier v = Some ff) as HexSome by
-      (destruct (lookup frontier v) as [px|]; [exists px; auto|congruence]).
-    elim HexSome; clear HexSome; intros res Hres.
-    remember (lookup_in frontier v res Hres) as Hin; clear HeqHin.
-    remember Hin as HinFrontier; clear HeqHinFrontier.
-    rewrite H0 in Hin; destruct (in_app_or _ _ (v, res) Hin) as [Hswh|Hswh]. {
-      specialize (H1 (v, res) Hswh); simpl in *.
-      destruct res; remember (HfrontierParents _ _ _ Hres) as Hr; clear HeqHr.
-    } simpl Hswh; destruct Hswh.
-    Focus 2.
-      exists v. split; [auto|].
-      assert (In (v, res) frontier') as HinFrontier' by
+    elim Hd; clear Hd; intros p_in  Hd;
+    elim Hd; clear Hd; intros v     Hd;
+    elim Hd; clear Hd; intros p_out Hd.
+    destruct Hd as [Hp_split [HvUnexpanded [HwUnexpanded Hlookup_v]]].
+    elim Hlookup_v; clear Hlookup_v; intros vp Hlookup_v.
+    remember (lookup_in frontier v vp Hlookup_v) as HIn; clear HeqHIn.
+    remember HIn as HInFrontier; clear HeqHInFrontier.
+    (* todo: separate this out *)
+    rewrite Hfrontier_split in HIn; rename HIn into HIn';
+      destruct (in_app_or _ _ (v, _) HIn') as [HIn|HIn]; clear HIn'. {
+      specialize (HdiscardedExpanded (v, _) HIn); simpl in *.
+      destruct vp; specialize (HfrontierParents _ _ _ Hlookup_v); crush.
+    } 
+    (* *)
+
+    destruct (HextendFrontier p_out v neighbors) as [Hv'|HnoInterference]. {
+      elim Hv'; clear Hv'; intros p_skip Hv'.
+      elim Hv'; clear Hv'; intros v' Hv'.
+      elim Hv'; clear Hv'; intros p_out' Hv'.
+      simpl in Hv'; destruct Hv' as [Hp_split' [Hv' Hws']].
+      exists (p_skip ++ p_in). exists v'. exists p_out'. repeat split.
+      - replace (p_out ++ v::p_in) with (p_out ++ [v] ++ p_in) in * by crush.
+        rewrite app_assoc in *. rewrite Hp_split' in *.
+        rewrite Hp_split. rewrite <- app_assoc. apply f_equal. reflexivity.
+      - admit. (* u cannot be last (u <> d). if us was in v', the thing after u would be v' *)
+      - admit.
+      - rewrite <- HfrontierInsert. exists (Some u, S (foundPathLen (u, pu))).
+        (* insert along with other things; lookup. may need NoDup *)
         admit.
-      elim (in_lookup' frontier' v res HinFrontier'); intros.
-      exists x0; trivial;
-    fail "end Focus1".
-    symmetry in H4; myinj' H4; clear H4 v Hv.
-    assert (exists v, In v p' /\ hasEdge g u v) as Hnext by
+    }
+
+    assert (forall w, In w p_out -> u<>w) (* if u was in p_out then the next thing would be in neihgbours *)
+      by admit.
+    assert (u <> v) (* if v=u and p_out=nil then d=u; otherwise (last p_out) in neighbors *)
+      by admit.
+
+    exists p_in; exists v; exists p_out; repeat split; eauto.
+    - eauto using remove_preserves.
+    - intros w Hw. specialize (HwUnexpanded w Hw). eapply remove_preserves; eauto.
+    - exists vp.
+      assert (lookup frontierRemaining v = Some vp)
+        (* discarded ++ (u, pu) :: frontierRemaining
+           v<>u
+           forall v, In v discarded -> ~ In v unexpanded
+           In v unexpanded
+        *)
+        by admit.
+      rewrite <- HfrontierInsert.
+      (* inserts to other keys do not change the value *)
       admit.
-    elim Hnext; clear Hnext; intros v Hv.
-    exists v. splitHs; split; auto.
-    exists (Some u, S (foundPathLen (u, pu))).
-    rewrite <- HfrontierInsert.
-    assert (lookup g u = Some neighbors -> hasEdge g u v -> In v neighbors) by
-      admit.
-    admit.
     }
   }
 
-      (* end of reasonable region *)
-
-
-  (*
-      elim (in_lookup' frontier _ _ HinFrontier); intros res' H12;
-        destruct res' as [[u'|] lv].
-      destruct (H3 _ _ _ H12) as [_ Hupto].
-      destruct parentPointer
-
-
-       elim H; clear H; intros v H; exists v; intro Hv; specialize (H Hv).
-       subst.
-       Focus 2.
-       elim H; clear H; intros s H; exists s.
-       elim H; clear H; intros p H; exists p.
-  *)
-
-         (* probably bogus attempt at length p' >= length (u_parent :: p)
-         assert (~ In u_parent unexpanded) by (apply (HparentExpanded u_parent p); auto).
-         generalize (Hcopy u_parent); destruct (node_in_dec u_parent unexpanded); [pv|].
-         intro H'.
-         rewrite H10 in H'.
-         assert (forall s'' p'', In s'' start -> reachableUsing g s'' u_parent p'' ->
-          length p'' >= length p
-         ). {
-           intros s'' p'' Hs'' Hp''; elim (H' s'' p'' Hs'' Hp''); clear H'.
-           intros s_ H'; elim H'; clear H'; intros p_; intros.
-           splitHs.
-           replace p_ with p in * by
-              (destruct (list_eq_dec node_eq_dec p p_); congruence).
-           auto.
-         }
-         generalize dependent p'.
-         generalize dependent s'.
-        *)
-
-  (*
-    replace d with u in *; subst.
-    assert (~ In u (remove node_eq_dec u unexpanded)) by (apply remove_In);
-      destruct (node_in_dec u (remove node_eq_dec u unexpanded)); [pv|].
-    Check (closestUnexpanded_corr foundPathLen unexpanded frontier).
-    destruct (node_in_dec d unexpanded); [|pv].
-  *)
-  (*
-    Focus 2.
-      destruct (node_in_dec d unexpanded);
-        [assert (In d unexpanded') by (eapply remove_preserves; eauto)
-        |assert (~ In d unexpanded') by (eapply remove_does_not_add; eauto)];
-       destruct (node_in_dec d unexpanded'); try solve [pv];
-       intros s' p' Hs' Hp'; specialize (H s' p' Hs' Hp');
-       revert H; intro H.
-       elim H; clear H; intros v H; exists v; intro Hv; specialize (H Hv).
-       Focus 2.
-       elim H; clear H; intros s H; exists s.
-       elim H; clear H; intros p H; exists p.
-       splitHs; repeat split; try assumption.
-   *)
 Qed.
