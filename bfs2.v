@@ -455,8 +455,9 @@ Proof.
   apply IHxs. intros. apply H. right. auto.
 Qed.
 
-Lemma insert_many_corr : forall {A} (f:A->nat) (xs:list A) (ys:list A) (zs:list A) (z:A),
-  fold_right (insert f) ys xs = zs -> (In z xs \/ In z ys) -> In z zs.
+Lemma insert_many_corr : forall {A} (f:A->nat) (xs:list A) (ys:list A) (zs:list A),
+  fold_right (insert f) ys xs = zs ->
+  forall (z:A), (In z xs \/ In z ys) -> In z zs.
 Proof.
   induction xs; intros; simpl in *.
   crush.
@@ -464,7 +465,11 @@ Proof.
   rewrite <- H. apply insert_in. left. auto.
   rewrite <- H. apply insert_in. right. apply (IHxs ys).
   auto. left. auto.
-  apply (IHxs ys).
+  remember (fold_right (insert f) ys xs) as xsys. symmetry in Heqxsys.
+  remember (IHxs _ _ Heqxsys) as H1.
+  rewrite <- H. apply insert_in.
+  right. apply H1. right. auto.
+Qed.
 
 Lemma frontieradd_keeps_old :
   forall frontierRemaining frontier' u pu neighbors v res,
@@ -474,13 +479,8 @@ Lemma frontieradd_keeps_old :
   In (v, res) frontierRemaining -> In (v, res) frontier'.
 Proof.
   intros.
-  remember (map (fun v0 : node => (v0, (Some u, S (foundPathLen (u, pu))))) neighbors)
-  as mappedns. induction mappedns.
-  simpl in *. rewrite <- H. auto.
-  apply IHmappedns.
-  
-  
-
+  eapply insert_many_corr. apply H. right. auto.
+Qed.
 
 (* inlining bfs_step to bfs did NOT give us functional induction, but
    separating it out did... *)
