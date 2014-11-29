@@ -62,13 +62,15 @@ Ltac pve :=
     | [ H : _ |- _ ] => assumption
     | [ H : False |- _ ] => destruct H
     | [ H : ?P, H' : ~?P |- _ ] => destruct (H' H)
-    | [ H : context[node_eq_dec ?x ?y] |- _ ] => destruct (node_eq_dec x y); repeat (mysimp; simpl in *; subst; eauto)
+    | [ H : context[node_eq_dec ?x ?y] |- _ ] =>
+      destruct (node_eq_dec x y); repeat (mysimp; simpl in *; subst; eauto)
     | [ H : ?A |- ?A /\ _  ] => split; [apply A|]
     | [ H : ?A |- _  /\ ?A ] => split; [|apply A]
     | [ H : ?A |- ?A \/  _ ] => left; apply A
     | [ H : ?A |-  _ \/ ?A ] => right; apply A
     | [ H : context[let (_, _) := ?x in _] |- _ ] => destruct x
-    (*| [ H : (match ?x with _ => Some _ | _ => None end = Some _) |- _ ] => destruct x*)
+    (*| [ H : (match ?x with _ => Some _ | _ => None end = Some _) |- _ ] =>
+        destruct x*)
   end.
 
 Ltac pv := repeat (
@@ -127,7 +129,8 @@ Qed.
 
 Definition hasEdge (g:graph) u v := exists vs, lookup g u = Some vs /\ In v vs.
 
-Lemma remove_length' : forall v vs, length vs >= length (remove node_eq_dec v vs) /\
+Lemma remove_length' : forall v vs,
+  length vs >= length (remove node_eq_dec v vs) /\
   (In v vs -> length vs > length (remove node_eq_dec v vs)).
 Proof.
   intros; induction vs; split; intros; auto.
@@ -407,6 +410,43 @@ Proof.
     subst; simpl in *. destruct (node_eq_dec a0 b).
     left; auto. right; apply IHxs; auto.
 Qed.
+
+Lemma in_notin_notsame : forall {A} (a:A) b xs, ~In a xs -> In b xs -> a <> b.
+Proof.
+  intros. induction xs. auto. simpl in *.
+  destruct H0 as [H0 | H0]; crush.
+Qed.
+
+Lemma find_head : forall {A} (f:A->bool) x xs,
+  (if f x then True else False) -> (find f (x::xs) = Some x).
+Proof.
+  intros; remember (f x) as fx; destruct fx; [|crush].
+  unfold find. rewrite <- Heqfx. auto. 
+Qed.
+
+Lemma find_head_not : forall {A} (f:A->bool) x xs,
+  (if f x then False else True) -> (find f (x::xs) = find f xs).
+Proof.
+  intros; remember (f x) as fx; destruct fx; [crush|].
+  unfold find. rewrite <- Heqfx. auto.
+Qed.
+
+Lemma lookup_head : forall {A} frontierRem u (pu:A) xs,
+  (forall x, In x xs -> fst x <> u) -> lookup (xs ++ (u, pu) :: frontierRem) u = Some pu.
+Proof.
+  induction xs; simpl in *. intros.
+  unfold lookup. assert (find (fun p : node * A =>
+  node_eq_decb u (fst p)) ((u, pu) :: frontierRem) = Some (u,pu)).
+  apply find_head. simpl in *. unfold node_eq_decb. destruct (node_eq_dec u u).
+  crush. crush.
+  unfold node_eq_decb. simpl in *. destruct (node_eq_dec u u).
+  simpl in *. reflexivity. crush.
+  intros. unfold lookup in *. unfold node_eq_decb in *. simpl in *.
+  assert (fst a <> u). apply H; left; auto.
+  destruct (node_eq_dec u (fst a)); [crush|].
+  apply IHxs. intros. apply H. right. auto.
+Qed.
+
 
 (* inlining bfs_step to bfs did NOT give us functional induction, but
    separating it out did... *)
