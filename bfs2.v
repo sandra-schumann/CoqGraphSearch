@@ -700,16 +700,23 @@ Lemma bfs_corr:
     } simpl Hswh; destruct Hswh.
     Focus 2.
       exists v. split; [auto|].
-      assert (In (v, res) frontier') as HinFrontier' by admit.
+      assert (In (v, res) frontier') as HinFrontier' by
+        admit.
       elim (in_lookup' frontier' v res HinFrontier'); intros.
       exists x0; trivial;
     fail "end Focus1".
-    symmetry in H4; myinj' H4; clear H4.
-    destruct pu as [[v_parent|] vl]; destruct (HfrontierParents _ _ _ Hres).
-    elim H11; clear H11; intros v_path Hv_path; splitHs.
-    subst.
+    symmetry in H4; myinj' H4; clear H4 v Hv.
+    assert (exists v, In v p' /\ hasEdge g u v) as Hnext by
+      admit.
+    elim Hnext; clear Hnext; intros v Hv.
+    exists v. splitHs; split; auto.
+    exists (Some u, S (foundPathLen (u, pu))).
+    rewrite <- HfrontierInsert.
+    assert (lookup g u = Some neighbors -> hasEdge g u v -> In v neighbors) by
+      admit.
+    admit.
     }
-    }
+  }
 
       (* end of reasonable region *)
 
