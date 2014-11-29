@@ -657,10 +657,9 @@ Lemma bfs_corr:
     rename x into discarded.
     assert (forall x, In x discarded -> fst x <> u) by (
       intros x Hdiscarded; specialize (H1 x Hdiscarded);
-      admit (* ~ In a xs -> In b xs -> a <> b  *)).
+      eapply in_notin_notsame; eauto).
     assert (lookup frontier u = Some pu) as Hlookup_u by (
-      subst;
-      admit).
+      subst; eapply lookup_head; eauto).
     elim Hd; clear Hd; intros v Hv.
     destruct Hv as [HvInp' Hlookup_v]; elim Hlookup_v; clear Hlookup_v; intros pv Hlookup_v.
     destruct pu as [[u_parent|] lu];
