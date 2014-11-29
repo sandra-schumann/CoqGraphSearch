@@ -781,6 +781,22 @@ Lemma bfs_corr:
     intros v vp vl.
     revert Hfrontier_split; intro; revert HfrontierInsert; intro.
     generalize (HfrontierParents v vp vl); intro Hfrontier.
+    intros Hin.
+    destruct (node_in_dec v neighbors). Focus 2.
+      assert (In (v, (vp, vl)) frontier) as HinOld by
+        (* this iteration did not add it, so it must have been in frontier before *)
+        admit.
+      specialize (Hfrontier HinOld).
+      destruct vp; [|eauto].
+      elim Hfrontier; clear Hfrontier; intros p Hfrontier.
+      exists p. split; try solve [splitHs; eauto].
+      destruct Hfrontier as [Hfrontier _].
+      assert (n2 <> u) by (
+        intro Heq; replace n2 with u in * by Heq; clear Heq;
+        destruct (HparentExpanded _ _ Hfrontier HminUnexpanded)).
+      rewrite <- HparentPrepend; simpl.
+      destruct (node_eq_dec n2 u); [|rewrite Hfrontier]; pv;
+    fail "end Focus 2".
   }
 
 Qed.
