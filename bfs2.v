@@ -455,7 +455,7 @@ Proof.
   apply IHxs. intros. apply H. right. auto.
 Qed.
 
-Lemma insert_many_corr : forall {A} (f:A->nat) (xs:list A) (ys:list A) (zs:list A),
+Lemma insert_many_in : forall {A} (f:A->nat) (xs:list A) (ys:list A) (zs:list A),
   fold_right (insert f) ys xs = zs ->
   forall (z:A), (In z xs \/ In z ys) -> In z zs.
 Proof.
@@ -470,6 +470,11 @@ Proof.
   rewrite <- H. apply insert_in.
   right. apply H1. right. auto.
 Qed.
+
+Lemma in_many_insert : forall {A} (f:A->nat) (xs:list A) (ys:list A) (zs:list A),
+  fold_right (insert f) ys xs = zs ->
+  forall (z:A), In z zs -> (In z xs \/ In z ys).
+Admitted.
 
 Lemma frontieradd_keeps_old :
   forall frontierRemaining frontier' u pu neighbors v res,
@@ -590,7 +595,8 @@ Proof.
 Qed.
     
 Lemma HextendFrontier : forall ws (v:node) neighbors,
-  (exists pre v' post, ws++[v]=post++v'::pre /\ In v' neighbors /\ (forall w, In w post -> ~In w neighbors))
+  (exists pre v' post, ws++[v]=post++v'::pre /\ In v' neighbors
+  /\ (forall w, In w post -> ~In w neighbors))
   \/
   (~In v neighbors /\ forall w, In w ws -> ~In w neighbors).
 Admitted.
