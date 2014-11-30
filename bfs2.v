@@ -474,7 +474,35 @@ Qed.
 Lemma in_many_insert : forall {A} (f:A->nat) (xs:list A) (ys:list A) (zs:list A),
   fold_right (insert f) ys xs = zs ->
   forall (z:A), In z zs -> (In z xs \/ In z ys).
-Admitted.
+Proof.
+  induction xs; intros; simpl in *.
+  crush.
+  remember (fold_right (insert f) ys xs) as xsys. symmetry in Heqxsys.
+  remember (IHxs _ _ Heqxsys z) as H1.
+  rewrite <- H in *.
+  remember (in_insert f _ _ _ H0) as H2.
+  destruct H2 as [H2 | H2]. left. left. auto.
+  remember (H1 H2) as H3. destruct H3 as [H3|]; auto.
+Qed.
+
+Lemma extractMin_sorted : forall {A} (f:A->nat) (xs:list A) (xxs':A*list A),
+  sorted f xs -> extractMin f xs = Some xxs' -> sorted f (snd xxs').
+Proof.
+  intros. unfold extractMin in *. destruct xs; crush.
+Qed.
+
+Lemma closestUnexpanded_sorted : forall (f:found->nat) (unexpanded:list node)
+  (frontier : list found) (ret : found * list found),
+  sorted f frontier ->
+  closestUnexpanded f unexpanded frontier = Some ret ->
+  sorted f (snd ret).
+Proof.
+  intros. functional induction (closestUnexpanded f unexpanded frontier);
+  inversion H0.
+  - subst. simpl in *.
+    unfold extractMin in *. destruct frontier; crush.
+  - apply IHo. destruct frontier; crush. crush.
+Qed. 
 
 Lemma frontieradd_keeps_old :
   forall frontierRemaining frontier' u pu neighbors v res,
