@@ -1004,5 +1004,33 @@ Lemma bfs_corr:
   }
 
   Unfocus. (* base case: our invariants imply the conclusion *)
+  
+  intros; splitHs;
+  rewrite <- H0 in *; clear ret H0;
+  rename H1 into HfrontierParents;
+  rename H2 into HfrontierSorted;
+  rename H3 into HparentExpanded;
+  rename H4 into HparentReachable;
+  split.
+
+  {
+    intros d p' Hp'.
+    revert H; intro.
+    specialize (H d p' Hp').
+    destruct (node_in_dec d unexpanded). {
+      assert (forall u pu, In (u,pu) frontier -> ~ In u unexpanded) as HfrontierExpanded
+        by admit.
+      elim H; clear H; intros p_in H.
+      elim H; clear H; intros v H.
+      elim H; clear H; intros p_out H.
+      destruct H as [_ [HvUnexpanded [_ HvFrontier]]].
+      elim HvFrontier; clear HvFrontier; intros vp HvFrontier.
+      specialize (HfrontierExpanded _ _ HvFrontier).
+      destruct (HfrontierExpanded HvUnexpanded).
+    }
+    elim H; intros p Hp.
+    exists p. splitHs; auto.
+  }
+
 
 Qed.
