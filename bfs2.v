@@ -719,19 +719,19 @@ Lemma bfs_corr:
   ))
     -> forall ret, bfs g unexpanded frontier parent = ret ->
   ((
-    forall (d:node) (p':list node), reachableUsing g s d p' ->
-    exists p, traceParent ret d = Some p /\ shortestPath g s d p
+    forall (d:node) (p':list node), reachableUsing g s d p' -> exists p, traceParent ret d = Some p
+  ) /\ (
+    forall (d:node) (p:list node), traceParent ret d = Some p -> shortestPath g s d p
   ))
 .
   intros until parent.
   functional induction (bfs g unexpanded frontier parent). Focus 2.
-  intros; eelim IHl; clear IHl; repeat split; [..|eauto]; auto; splitHs;
-    [intro x; exists x; subst; assumption|..];
-  rename H2 into HfrontierParents;
-  rename H3 into HfrontierSorted;
-  rename H4 into HparentExpanded;
-  rename H5 into HparentReachable;
-  clear dependent p'; clear dependent d; clear dependent ret;
+  intros until ret; eapply IHl.
+  splitHs; repeat split;
+  rename H0 into HfrontierParents;
+  rename H1 into HfrontierSorted;
+  rename H2 into HparentExpanded;
+  rename H3 into HparentReachable;
   expandBFS;
   rename H0 into HparentPrepend;
   rename H1 into HfrontierInsert;
