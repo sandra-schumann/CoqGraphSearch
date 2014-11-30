@@ -719,6 +719,58 @@ Notation shortestPath g s d p := (
   /\
   (forall p', reachableUsing g s d p' -> length p' >= length p)).
 
+Lemma reachableUsing_head: forall g s d p, reachableUsing g s d p ->
+  p <> [] -> exists t, p = d::t.
+Proof.
+  induction p; intros; simpl in *.
+  - crush.
+  - exists p. assert (a = d). inversion H. crush. crush.
+Qed.
+
+Lemma contains_sth_is_not_empty : forall {A} xs (x:A) ys, xs++(x::ys) <> [].
+Proof. induction xs; crush. Qed.
+
+Lemma last_subst_into : forall {A} a (x:A) y b, a++[x] = y::b ->
+  forall c, a++(x::c) = y::(b++c).
+Proof. induction a; intros; crush. Qed.
+
+Lemma nonempty_has_last : forall {A} (xs : list A), xs <> [] ->
+  exists x xs', xs = xs' ++ [x].
+Proof.
+  induction xs; intros. unfold not in H. assert False. apply H. auto. inversion H0.
+  destruct xs. exists a. exists []. auto.
+  assert (a0::xs <> []). unfold not; intros. inversion H0.
+  elim (IHxs H0); intros. elim H1; intros.
+  rewrite H2.
+  exists x. exists (a::x0). auto.
+Qed.
+
+Lemma dest_different_end_nonempty : forall p_out' g s d p',
+  reachableUsing g s d p' ->
+  forall u, u <> d ->
+  forall p_out v p_in, p' = p_out ++ v :: p_in ->
+  forall p_skip, p_out ++ [v] = p_out' ++ u :: p_skip ->
+  exists v'' p_out'', p_out' = p_out'' ++ [v''].
+Proof.
+  intros.
+  assert (p_out <> []). unfold not; intros. rewrite H3 in *; clear H3.
+    simpl in *.
+    assert (p' <> []). rewrite H1. unfold not; intros. inversion H3.
+    elim (reachableUsing_head _ _ _ _ H H3); intros.
+    destruct p_out'. inversion H2. subst. inversion H1. crush.
+    inversion H2. remember (contains_sth_is_not_empty p_out' u p_skip) as H8.
+    crush.
+  destruct p_out; crush.
+  assert (p_out' <> []). unfold not; intros. rewrite H1 in *; clear H1.
+    simpl in *.
+    inversion H2.
+    assert (n :: p_out ++ v :: p_in <> []).
+      unfold not; intros. inversion H1.
+    elim (reachableUsing_head _ _ _ _ H H1); intros.
+    inversion H6. subst. apply H0; auto.
+  apply nonempty_has_last. auto.
+Qed.
+
 Lemma bfs_corr:
   forall (g:graph) (s:node),
   forall (unexpanded:list node) (frontier:list found) (parent:list found),
@@ -861,7 +913,46 @@ Lemma bfs_corr:
         - replace (p_out ++ v::p_in) with (p_out ++ [v] ++ p_in) in * by crush.
           rewrite app_assoc in *. rewrite Hp_split' in *.
           rewrite Hp_split. rewrite <- app_assoc. apply f_equal. reflexivity.
-        - admit. (* u cannot be last (u <> d). if us was in v', the thing after u would be v' *)
+        - destruct (node_eq_dec v' u).
+          (* u cannot be last (u <> d). if us was in v', the thing after u would be v' *)
+          * rewrite e in *.
+            assert (exists v'' p_out'', p_out' = p_out'' ++ [v'']).
+            eapply dest_different_end_nonempty; eauto.
+    
+    
+
+
+              induction p_out'.
+                (* d is the destination;
+                   d is not u,
+                   but u is head (p_out++[v])
+                   and thus head p';
+                   contradiction *)
+                simpl in Hp_split'.
+                assert (p' <> []). rewrite Hp_split. apply contains_sth_is_not_empty.
+                elim (reachableUsing_head _ _ _ _ Hp' H0); intros.
+                rewrite (last_subst_into _ _ _ _ Hp_split') in Hp_split.
+                rewrite Hp_split in H1. inversion H1. rewrite H3 in n1. crush.
+                
+                admit.
+            elim H0; clear H0; intros v'' H0; elim H0; clear H0; intros p_out'' H0.
+            rewrite H0 in Hp_split'.
+            (* Hp_split' in this form means edge between u and v'' *)
+            (* edge from u to v'' means In v'' neighbors *)
+            (* v'' is in p_out' *)
+            (* contradiction from Hws' *)
+            admit.
+          * eapply (remove_preserves _ _ _ HunepandedRemove).
+            auto. destruct (node_eq_dec v' v). rewrite e; auto.
+            apply HwUnexpanded.
+            assert (In v' (p_out'++v'::p_skip)) by crush.
+            rewrite <- Hp_split' in H0.
+            
+            Lemma in_front : forall {A} (y:A) (x:A) (xs:list A),
+              In y (xs++[x]) -> In y xs \/ y = x.
+            Proof. induction xs; crush. Qed.
+            
+            destruct (in_front _ _ _ H0) as [H1 | H1]; crush.
         - admit.
         - rewrite <- HfrontierInsert. exists (Some u, S (foundPathLen (u, pu))).
           (* insert along with other things, and guess what, it is in there *)
