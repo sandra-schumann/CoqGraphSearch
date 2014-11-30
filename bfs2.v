@@ -687,6 +687,28 @@ Proof.
   intros. unfold hasEdge in *. exists neighbors. split; auto.
 Qed.
 
+Lemma parent_means_expanded : forall parent u p unexpanded,
+  traceParent parent u = Some p ->
+  (forall (n : node) (np : option node * nat),
+          In (n, np) parent -> ~ In n unexpanded) ->
+  ~ In u unexpanded.
+Proof.
+  intros. induction parent.
+  apply (H0 u (Some u,0)). simpl in *. inversion H.
+  simpl in *. destruct a. destruct (node_eq_dec u n).
+  eapply (H0 u p0).
+  left. rewrite e. apply f_equal. reflexivity.
+  eapply IHparent. destruct (traceParent parent u); crush.
+  intros. apply (H0 n1 np). right. auto.
+Qed.
+
+Lemma Hfrontier : forall parent u p pu,
+  traceParent parent u = Some p -> In (u, pu) parent.
+Proof.
+  induction parent; intros; simpl in *. inversion H.
+  destruct a. destruct (node_eq_dec u n).
+Abort. (* Needs something about pu *)
+
 Notation shortestPath g s d p := (
   reachableUsing g s d p
   /\
