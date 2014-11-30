@@ -741,19 +741,19 @@ Lemma bfs_corr:
   ))
     -> forall ret, bfs g unexpanded frontier parent = ret ->
   ((
-    forall (d:node) (p':list node), reachableUsing g s d p' ->
-    exists p, traceParent ret d = Some p /\ shortestPath g s d p
+    forall (d:node) (p':list node), reachableUsing g s d p' -> exists p, traceParent ret d = Some p
+  ) /\ (
+    forall (d:node) (p:list node), traceParent ret d = Some p -> shortestPath g s d p
   ))
 .
   intros until parent.
   functional induction (bfs g unexpanded frontier parent). Focus 2.
-  intros; eelim IHl; clear IHl; repeat split; [..|eauto]; auto; splitHs;
-    [intro x; exists x; subst; assumption|..];
-  rename H2 into HfrontierParents;
-  rename H3 into HfrontierSorted;
-  rename H4 into HparentExpanded;
-  rename H5 into HparentReachable;
-  clear dependent p'; clear dependent d; clear dependent ret;
+  intros until ret; eapply IHl.
+  splitHs; repeat split;
+  rename H0 into HfrontierParents;
+  rename H1 into HfrontierSorted;
+  rename H2 into HparentExpanded;
+  rename H3 into HparentReachable;
   expandBFS;
   rename H0 into HparentPrepend;
   rename H1 into HfrontierInsert;
@@ -885,7 +885,7 @@ Lemma bfs_corr:
     intros Hin.
 
     destruct (in_many_insert foundPathLen _ _ _ HfrontierInsert _ Hin) as [Hnew|Halready].
-    Focus 2. (* if the node was already in the frontier, true by invariant *)
+    Focus 2. (* if the node was already in the frontier *)
       assert (frontier = (discarded ++ [(u, pu)]) ++ frontierRemaining) as Hfrontier_split2 by crush.
       remember (in_or_app (discarded++[(u,pu)]) _ _ (or_intror Halready)) as Hbefore; clear HeqHbefore.
       rewrite <- Hfrontier_split2 in Hbefore.
@@ -897,10 +897,12 @@ Lemma bfs_corr:
       rewrite <- HparentPrepend; simpl.
       destruct (node_eq_dec n1 u); [|rewrite Hfrontier]; pv.
       replace n1 with u in * by assumption; clear e.
-      Check (HparentExpanded).
-      admit;
+      assert False; [|pv].
+      apply (fun pf => HparentExpanded u pu pf HminUnexpanded).
+      admit; (* traceParent parent u = Some p -> In (u, pu) parent. NOTE: this apears again below *)
     fail "end Focus 2".
 
+    (* TODO: refactor some of the next lines, they appear again below...*)
     assert (In (u,pu) frontier) as HuInFrontier.
       rewrite Hfrontier_split; apply in_or_app; right; left; crush.
     destruct pu as [upptr ul].
@@ -939,6 +941,57 @@ Lemma bfs_corr:
   {
     (* sorted frontier'*)
     admit.
+  }
+
+  { (* every node in parent is expanded *)
+    intros v vp Hv.
+    (* todo: refactor this out *)
+    assert ((v,vp)=(u,pu) \/ In (v,vp) parent) as Heither.
+      assert (In (v, vp) ([(u, pu)] ++ parent)) as Hl by crush.
+      specialize (in_app_or [(u,pu)] parent (v,vp) Hl); intro Hor.
+      destruct Hor as [[Ha|Hf]|Hb]; [left|inversion Hf|]; auto.
+    (* *)
+    destruct Heither as [Heq|Hin]; [myinj' Heq; subst; apply remove_In|].
+    generalize (HparentExpanded v vp Hin) as HwasExpanded; intro.
+    eapply remove_does_not_add; eauto.
+  }
+
+  {
+    rewrite <- HparentPrepend.
+    revert HparentReachable; intro.
+    intros v vp Hvp.
+    (* todo: refactor this out *)
+    assert ((v,vp)=(u,pu) \/ In (v,vp) parent) as Heither.
+      assert (In (v, vp) ([(u, pu)] ++ parent)) as Hl by crush.
+      specialize (in_app_or [(u,pu)] parent (v,vp) Hl); intro Hor.
+      destruct Hor as [[Ha|Hf]|Hb]; [left|inversion Hf|]; auto.
+    (* *)
+    destruct Heither as [Heq|Hin].
+    Focus 2.
+      eelim HparentReachable; eauto; intros p Hp. destruct Hp as [Htracep Hreachable].
+      exists p. split; [|auto].
+      simpl. destruct (node_eq_dec v); [|rewrite Htracep; auto].
+      rewrite e in *; clear e.
+      assert False; [|pv].
+      apply (fun pf => HparentExpanded u pu pf HminUnexpanded).
+      admit; (* traceParent parent u = Some p -> In (u, pu) parent. NOTE: this apears above *)
+    fail "end Focus2".
+    myinj' Heq.
+    assert (In (u,pu) frontier) as HuInFrontier.
+      rewrite Hfrontier_split; apply in_or_app; right; left; crush.
+    destruct pu as [upptr ul].
+    generalize (HfrontierParents _ _ _ HuInFrontier) as HuReachable; intro.
+    generalize (lookup_neighbors _ _ _ Heqk) as HneighborEdges; intro.
+    destruct (node_eq_dec u u); [|pv].
+    destruct upptr as [u_parent|]. {
+      elim HuReachable; clear HuReachable; intros u_parent_path Hu_parent_path.
+      exists (u::u_parent_path).
+      destruct Hu_parent_path as [Hu_parent_lookup]; rewrite Hu_parent_lookup.
+      splitHs; split; auto.
+    } {
+      exists [].
+      splitHs; subst; split; auto; constructor.
+    }
   }
 
   Unfocus. (* base case: our invariants imply the conclusion *)
