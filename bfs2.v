@@ -127,7 +127,16 @@ Qed.
 Lemma in_lookup' : forall {A:Type} ps,
     forall x (y:A), In (x, y) ps ->
     exists y', lookup ps x = Some y'.
-Admitted.
+Proof.
+  intros. induction ps. inversion H.
+  simpl in *. destruct H. unfold lookup.
+  simpl in *. unfold node_eq_decb.
+  destruct (node_eq_dec x (fst a)). exists (snd a). auto.
+  destruct a. inversion H. crush.
+  unfold lookup. simpl in *. unfold node_eq_decb.
+  destruct (node_eq_dec x (fst a)). exists (snd a). auto.
+  unfold lookup in *. apply IHps. auto.
+Qed.
 
 Lemma lookup_corr : forall {A:Type} ps, NoDup (keys ps) ->
     forall x (y:A), lookup ps x = Some y <-> In (x, y) ps.
