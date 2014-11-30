@@ -826,6 +826,12 @@ Proof.
     right. eapply IHxs. apply H3. auto.
 Qed.
 
+Lemma in_with_map : forall {A} v neighs, In (v:A) neighs ->
+  forall {B} (w:B), In (v,w) (map (fun x => (x,w)) neighs).
+Proof.
+  induction neighs; intros; crush.
+Qed.
+
 Lemma bfs_corr:
   forall (g:graph) (s:node),
   forall (unexpanded:list node) (frontier:list found) (parent:list found),
@@ -1010,7 +1016,8 @@ Lemma bfs_corr:
 
         - rewrite <- HfrontierInsert. exists (Some u, S (foundPathLen (u, pu))).
           (* insert along with other things, and guess what, it is in there *)
-          admit.
+          eapply insert_many_in. auto.
+          left. apply in_with_map. auto.
       }
 
       assert (forall w, In w p_out -> u<>w) (* if u was in p_out then the next thing would be in neihgbours *)
