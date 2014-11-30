@@ -630,13 +630,33 @@ Proof.
   fold traceParent. remember (traceParent parent d) as dpar. destruct dpar.
   subst. crush. crush. crush.
 Qed.
-    
+
 Lemma HextendFrontier : forall ws (v:node) neighbors,
   (exists pre v' post, ws++[v]=post++v'::pre /\ In v' neighbors
   /\ (forall w, In w post -> ~In w neighbors))
   \/
   (~In v neighbors /\ forall w, In w ws -> ~In w neighbors).
-Admitted.
+Proof.
+  intros. induction ws; simpl in *.
+  - (* base case *)
+    destruct (node_in_dec v neighbors).
+    + left. exists []; exists v; exists []. simpl in *; auto.
+    + right. split; crush.
+  - (* inductive case *)
+    destruct IHws as [IHws | IHws].
+    + left. destruct (node_in_dec a neighbors).
+      * exists (ws++[v]); exists a; exists []. simpl in *. repeat split.
+        auto. intros. inversion H.
+      * repeat (elim IHws; clear IHws; intro; intro IHws).
+        exists x. exists x0. exists (a::x1). repeat split; simpl in *; auto.
+        rewrite H. auto. intros. destruct H1 as [H1 | H1].
+        rewrite H1 in *. auto. apply IHws. auto.
+    + destruct (node_in_dec a neighbors).
+      * left. exists (ws++[v]); exists a; exists []. simpl in *. repeat split.
+        auto. intros. inversion H.
+      * right. destruct IHws as [IHws1 IHws2]. split. auto. intros.
+        destruct H as [H | H]; subst; auto.
+Qed.
 
 Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
 | IdPath : forall g s, reachableUsing g s s []
@@ -647,7 +667,18 @@ Lemma removing_corr_item : forall x xs xs',
   remove node_eq_dec x xs = xs' ->
   forall x', ~(In x' xs') -> In x' xs -> x = x'.
 Proof.
-Admitted.
+  induction xs; intros; auto.
+  - inversion H1.
+  - simpl in *. destruct H1 as [H1 | H1].
+    destruct (node_eq_dec x a). crush. rewrite <- H in *.
+    simpl in *. assert False. apply H0. auto.
+    inversion H2.
+    destruct (node_eq_dec x a). eapply IHxs; crush.
+    eapply IHxs. remember (remove node_eq_dec x xs) as xsx.
+    apply (Heqxsx). unfold not in *. intros.
+    apply H0. rewrite <- H in *. simpl in *.
+    right. auto. auto.
+Qed.
 
 Lemma not_None : forall {A:Type} (sx:option A), sx <> None -> exists x, sx = Some x.
   intros. destruct sx; [|congruence]. eauto.
