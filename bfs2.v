@@ -43,6 +43,12 @@ Definition lookup {A:Type} (ps:list(node*A)) (x:node) :=
     | None => None
     end.
 
+Definition lookupDefault {A:Type} (ps:list(node*A)) (default:A) (x:node) :=
+  match lookup ps x with
+  | None => default
+  | Some y => y
+  end.
+
 Ltac myinj H := injection H; clear H; intros; try subst.
 Ltac myinj' H :=
   injection H;
@@ -144,7 +150,7 @@ Proof.
   intros. split. apply lookup_in. apply in_lookup; crush.
 Qed.
 
-Definition hasEdge (g:graph) u v := exists vs, lookup g u = Some vs /\ In v vs.
+Definition hasEdge (g:graph) u v := In v (lookupDefault g [] u).
 
 Lemma remove_length' : forall v vs,
   length vs >= length (remove node_eq_dec v vs) /\
@@ -684,7 +690,8 @@ Lemma lookup_neighbors:
   forall g u neighbors, lookup g u = Some neighbors ->
   forall v, In v neighbors -> hasEdge g u v.
 Proof.
-  intros. unfold hasEdge in *. exists neighbors. split; auto.
+  intros. unfold hasEdge in *. unfold lookupDefault in *.
+  rewrite H; auto.
 Qed.
 
 Lemma parent_means_expanded : forall parent u p unexpanded,
