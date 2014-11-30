@@ -612,6 +612,10 @@ Lemma removing_corr_item : forall x xs xs',
 Proof.
 Admitted.
 
+Lemma lookup_neighbors: 
+  forall g u neighbors, lookup g u = Some neighbors -> forall v, In v neighbors -> hasEdge g u v.
+Admitted.
+
 Lemma not_None : forall {A:Type} (sx:option A), sx <> None -> exists x, sx = Some x.
   intros. destruct sx; [|congruence]. eauto.
 Qed.
@@ -637,10 +641,14 @@ Lemma bfs_corr:
       match parentPointer with
       | None => v = s /\ l = 0
       | Some u => exists p,
-          traceParent parent u = Some p /\ shortestPath g s v (v::p) /\ length (v::p) = l
+          traceParent parent u = Some p /\ reachableUsing g s v (v::p) /\ length (v::p) = l
       end
   ) /\ (
     sorted foundPathLen frontier
+  ) /\ (
+    forall n np, In (n, np) parent -> ~In n unexpanded
+  ) /\ (
+    forall n np, In (n, np) parent -> exists p, traceParent parent n = Some p /\ reachableUsing g s n p
   ))
     -> forall ret, bfs g unexpanded frontier parent = ret ->
   ((
@@ -654,6 +662,8 @@ Lemma bfs_corr:
     [intro x; exists x; subst; assumption|..];
   rename H2 into HfrontierParents;
   rename H3 into HfrontierSorted;
+  rename H4 into HparentExpanded;
+  rename H5 into HparentReachable;
   clear dependent p'; clear dependent d; clear dependent ret;
   expandBFS;
   rename H0 into HparentPrepend;
@@ -722,7 +732,9 @@ Lemma bfs_corr:
         admit.
       splitHs; repeat split; auto.
       subst. simpl. destruct (node_eq_dec u u); [|crush].
-      destruct (traceParent parent u_parent); [|congruence]. pv.
+      destruct (traceParent parent u_parent); [|congruence].
+      exists (u::l0); split; [auto|].
+      admit. (* TODO(difficult): the said path is the shortest*)
     } {
       elim Hd; clear Hd; intros p_in  Hd;
       elim Hd; clear Hd; intros v     Hd;
@@ -783,7 +795,7 @@ Lemma bfs_corr:
     generalize (HfrontierParents v vp vl); intro Hfrontier.
     intros Hin.
 
-    destruct (in_many_insert foundPathLen _ _ _ HfrontierInsert _ Hin) as [Hew|Halready].
+    destruct (in_many_insert foundPathLen _ _ _ HfrontierInsert _ Hin) as [Hnew|Halready].
     Focus 2. (* if the node was already in the frontier, true by invariant *)
       assert (frontier = (discarded ++ [(u, pu)]) ++ frontierRemaining) as Hfrontier_split2 by crush.
       remember (in_or_app (discarded++[(u,pu)]) _ _ (or_intror Halready)) as Hbefore; clear HeqHbefore.
@@ -796,9 +808,43 @@ Lemma bfs_corr:
       rewrite <- HparentPrepend; simpl.
       destruct (node_eq_dec n1 u); [|rewrite Hfrontier]; pv.
       replace n1 with u in * by assumption; clear e.
-      admit; (* destruct (HparentExpanded _ _ Hfrontier HminUnexpanded)); crush. *)
+      Check (HparentExpanded).
+      admit;
     fail "end Focus 2".
 
+    assert (In (u,pu) frontier) as HuInFrontier.
+      rewrite Hfrontier_split; apply in_or_app; right; left; crush.
+    destruct pu as [upptr ul].
+    generalize (HfrontierParents _ _ _ HuInFrontier) as HuReachable; intro.
+    generalize (lookup_neighbors _ _ _ Heqk) as HneighborEdges; intro.
+    (* TODO: move this into the following induction in place of an admit *)
+
+    revert HuReachable Hnew HparentPrepend; clear;
+    intros HuReachable Hnew HparentPrepend.
+    induction neighbors; [pv|].
+    simpl in Hnew; destruct Hnew as [HNow|Hbefore].
+    Focus 2.
+      eapply IHneighbors; clear IHneighbors; eauto;
+    fail "end Focus 2".
+    clear IHneighbors.
+    injection HNow; clear HNow; intros.
+    destruct vp; [|pv].
+    rewrite <- HparentPrepend.
+    replace a with v in * by auto.
+    replace n with u in * by (injection H0; auto).
+    destruct upptr as [u_parent|]. {
+      elim HuReachable; intros u_parent_path Hu_parent_path. exists (u::u_parent_path).
+      repeat split; splitHs.
+      - simpl. destruct (node_eq_dec u u); [|pv]. rewrite H2; reflexivity.
+      - econstructor; eauto. admit. (* TODO: HneighborEdges *)
+      - simpl. replace (S (length u_parent_path)) with ul by auto.
+        unfold foundPathLen in *; auto.
+    } {
+      elim HuReachable; intros; splitHs; subst.
+      exists []; repeat split; simpl; eauto.
+      - destruct (node_eq_dec s s); pv.
+      - econstructor. instantiate (1:=s). constructor. admit. (* TODO: HneighborEdges *)
+    }
   }
 
   {
