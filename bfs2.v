@@ -43,6 +43,12 @@ Definition lookup {A:Type} (ps:list(node*A)) (x:node) :=
     | None => None
     end.
 
+Definition lookupDefault {A:Type} (ps:list(node*A)) (default:A) (x:node) :=
+  match lookup ps x with
+  | None => default
+  | Some y => y
+  end.
+
 Ltac myinj H := injection H; clear H; intros; try subst.
 Ltac myinj' H :=
   injection H;
@@ -144,7 +150,7 @@ Proof.
   intros. split. apply lookup_in. apply in_lookup; crush.
 Qed.
 
-Definition hasEdge (g:graph) u v := exists vs, lookup g u = Some vs /\ In v vs.
+Definition hasEdge (g:graph) u v := In v (lookupDefault g [] u).
 
 Lemma remove_length' : forall v vs,
   length vs >= length (remove node_eq_dec v vs) /\
@@ -684,7 +690,8 @@ Lemma lookup_neighbors:
   forall g u neighbors, lookup g u = Some neighbors ->
   forall v, In v neighbors -> hasEdge g u v.
 Proof.
-  intros. unfold hasEdge in *. exists neighbors. split; auto.
+  intros. unfold hasEdge in *. unfold lookupDefault in *.
+  rewrite H; auto.
 Qed.
 
 Lemma parent_means_expanded : forall parent u p unexpanded,
@@ -808,13 +815,14 @@ Lemma bfs_corr:
            /\ In v unexpanded
            /\ (forall w, In w (p_out) -> In w unexpanded)
            /\ exists vp, In (v, vp) frontier
-      else exists p, traceParent parent d = Some p /\ shortestPath g s d p
+      else exists p, traceParent parent d = Some p
   ) /\ (
     forall v parentPointer l, In (v, (parentPointer, l)) frontier ->
       match parentPointer with
       | None => v = s /\ l = 0
       | Some u => exists p,
           traceParent parent u = Some p /\ reachableUsing g s v (v::p) /\ length (v::p) = l
+                                        (*todo: replace with hasEdge ? *)
       end
   ) /\ (
     sorted foundPathLen frontier
@@ -823,7 +831,7 @@ Lemma bfs_corr:
   ) /\ (
     forall n np, In (n, np) parent -> exists p, traceParent parent n = Some p
   ) /\ (
-    forall n  p, traceParent parent n = Some p -> reachableUsing g s n p
+    forall n  p, traceParent parent n = Some p -> shortestPath g s n p
   ))
     -> forall ret, bfs g unexpanded frontier parent = ret ->
   ((
@@ -834,13 +842,13 @@ Lemma bfs_corr:
 .
   intros until parent.
   functional induction (bfs g unexpanded frontier parent). Focus 2.
-  intros until ret; eapply IHl; clear IHl.
-  splitHs; repeat split;
+  intros until ret; eapply IHl; clear IHl;
+  splitHs; split; [|split;[|split;[|split;[|split]]]];
   rename H0 into HfrontierParents;
   rename H1 into HfrontierSorted;
   rename H2 into HparentExpanded;
   rename H3 into HparentSome;
-  rename H4 into HparentReachable;
+  rename H4 into HparentPaths;
   expandBFS;
   rename H0 into HparentPrepend;
   rename H1 into HfrontierInsert;
@@ -850,7 +858,7 @@ Lemma bfs_corr:
   destruct (closestUnexpanded foundPathLen unexpanded frontier); [|pv]; intro Hc;
   elim Hc; clear Hc; intros discarded Hc;
   destruct Hc as [Hfrontier_split [HdiscardedExpanded [HextractMin HminUnexpanded]]];
-  try (destruct p; destruct f; myinj' Heqc; destruct p)).
+  destruct p; destruct f; myinj' Heqc; destruct p).
 
   {
     remember H as Hd; clear HeqHd.
@@ -865,8 +873,8 @@ Lemma bfs_corr:
         destruct (closestUnexpanded foundPathLen unexpanded frontier); [|pv]; intro Hc;
         elim Hc; clear Hc; intros; splitHs; crush).
       assert (d <> u) by crush.
-      elim Hd; intros p Hp; exists p; destruct Hp.
-      split; [apply (parents_dont_disappear parent parent' _ _ d p HparentPrepend)|]; auto;
+      elim Hd; intros p Hp; exists p.
+      eauto using (parents_dont_disappear parent parent' _ _ d p HparentPrepend);
     fail "end Focus 2".
     destruct (node_eq_dec u d);
       [destruct (node_in_dec d unexpanded');
@@ -885,36 +893,12 @@ Lemma bfs_corr:
       destruct Hd as [Hp_split [HvUnexpanded [HwUnexpanded Hfrontier_v]]].
       elim Hfrontier_v; clear Hfrontier_v; intros vp Hfrontier_v.
       destruct pu as [[u_parent|] lu];
-        elim (HfrontierParents _ _ _ Hfrontier_u); intros pu Hu_parent.
-      Focus 2. splitHs; subst; exists []; simpl; destruct (node_eq_dec s s); repeat split;
-        [constructor
-        |intros; destruct p'; simpl; omega
-        |congruence
-        |constructor
-        |intros; destruct p'; simpl; omega
-        ];
-      fail "end Focus 2".
-      destruct vp as [vpp lv].
-          generalize (HfrontierParents _ _ _ Hfrontier_v) as Hv_parent; intro.
-      remember Hfrontier_v as HIn; clear HeqHIn.
-      (* todo: separate this out *)
-      rewrite Hfrontier_split in HIn; rename HIn into HIn';
-        destruct (in_app_or _ _ (v, _) HIn') as [HIn|HIn]; clear HIn'. {
-        specialize (HdiscardedExpanded (v, _) HIn); simpl in *.
-        specialize (HfrontierParents _ _ _ Hfrontier_v); crush.
-      } 
-      (* *)
-      assert (lv >= lu).
-        simpl in HIn. destruct HIn as [HIn | HIn].
-          inversion HIn. omega.
-          assert (foundPathLen (v,(vpp,lv)) >= foundPathLen (u, (Some u_parent, lu))).
-          apply HextractMin. simpl in *. auto.
-          unfold foundPathLen in H1. simpl in H1. auto.
+        elim (HfrontierParents _ _ _ Hfrontier_u); intros pu Hu_parent;
+        [|splitHs; subst; exists []; simpl; destruct (node_eq_dec s s); [auto|congruence]].
       splitHs; repeat split; auto.
       subst. simpl. destruct (node_eq_dec u u); [|crush].
       destruct (traceParent parent u_parent); [|congruence].
-      exists (u::l0); split; [auto|].
-      admit. (* TODO(difficult): the said path is the shortest*)
+      exists (u::l0); auto.
     } {
       elim Hd; clear Hd; intros p_in  Hd;
       elim Hd; clear Hd; intros v     Hd;
@@ -1016,8 +1000,8 @@ Lemma bfs_corr:
       replace n1 with u in * by assumption; clear e.
       assert False; [|pv].
       elim (traceparent_in _ _ _ Hfrontier); intros.
-      apply (fun pf => HparentExpanded u x pf HminUnexpanded). auto.
-      (* traceParent parent u = Some p -> In (u, pu) parent. NOTE: this apears again below *)
+      apply (fun pf => HparentExpanded u x pf HminUnexpanded). auto;
+    fail "end Focus 2".
 
     (* TODO: refactor some of the next lines, they appear again below...*)
     assert (In (u,pu) frontier) as HuInFrontier.
@@ -1075,7 +1059,7 @@ Lemma bfs_corr:
 
   {
     rewrite <- HparentPrepend.
-    revert HparentReachable; intro.
+    revert HparentPaths; intro.
     intros v vp Hvp.
     (* todo: refactor this out *)
     assert ((v,vp)=(u,pu) \/ In (v,vp) parent) as Heither.
@@ -1113,33 +1097,76 @@ Lemma bfs_corr:
   }
   
   {
-    rewrite <- HparentPrepend.
-    revert HparentReachable; intro.
-    intros v vp Hvp.
+    intros v p Hvp.
+    rewrite <- HparentPrepend in Hvp.
+    revert HparentPaths; intro.
     simpl in Hvp.
     destruct (node_eq_dec v u). {
       assert (In (u,pu) frontier) as HuInFrontier.
         rewrite Hfrontier_split; apply in_or_app; right; left; crush.
-      destruct pu as [upptr ul].
+      destruct pu as [upptr lu].
       generalize (HfrontierParents _ _ _ HuInFrontier) as HuReachable; intro.
       generalize (lookup_neighbors _ _ _ Heqk) as HneighborEdges; intro.
-      rewrite <- e in *; clear e.
+      rewrite e in *; clear e v.
       destruct upptr as [u_parent|]. {
         elim HuReachable; clear HuReachable; intros u_parent_path Hu_parent_path.
-        destruct Hu_parent_path as [Hu_parent_Some [Hu_parent_reachable _]].
+        destruct Hu_parent_path as [Hu_parent_Some [Hu_parent_reachable Hupp_length]].
         rewrite Hu_parent_Some in Hvp.
-        injection Hvp; clear Hvp; intro Heq; rewrite <- Heq. assumption.
+        injection Hvp; clear Hvp; intro Heq; rewrite <- Heq; clear Heq.
+        split; auto.
+        (* a new non-trivial path we add to parent is shortest *)
+        intros p' Hp'.
+        generalize (H u p' Hp') as He; intro.
+        destruct (node_in_dec u unexpanded) as [HeuUnexpanded|]; [|congruence].
+        elim He; clear He; intros p_in He.
+        elim He; clear He; intros v He.
+        elim He; clear He; intros p_out He.
+        destruct He as [Hsplit_p [HvUnexpanded [Hp_out HvFrontier]]].
+        rewrite Hsplit_p in *; clear Hsplit_p.
+        elim HvFrontier; clear HvFrontier; intros vp HvFrontier.
+        generalize HvFrontier; intro HIn.
+        destruct vp as [vpp lv].
+        generalize (HfrontierParents _ _ _ HvFrontier); intro Hv_parent.
+        (* todo: separate this out? HdiscardExpanded + Hfrontier_split *)
+        rewrite Hfrontier_split in HIn; rename HIn into HIn'.
+        destruct (in_app_or _ _ (v, _) HIn') as [HIn|HIn]; clear HIn'. {
+          specialize (HdiscardedExpanded (v, _) HIn); crush.
+        } 
+        (* *)
+        assert (lv >= lu) as Hge. {
+          simpl in HIn. destruct HIn as [HIn | HIn].
+            inversion HIn. omega.
+            assert (foundPathLen (v,(vpp,lv)) >= foundPathLen (u, (Some u_parent, lu)))
+              as Hge' by (apply HextractMin; simpl in *; auto).
+            unfold foundPathLen in Hge'. simpl in Hge'. auto.
+        }
+        simpl; rewrite Hupp_length; clear Hupp_length.
+        assert (length (p_out++v::p_in) >= lv); [|omega]; clear Hge.
+        destruct vpp as [v_parent|]; [|splitHs; omega].
+        elim Hv_parent; clear Hv_parent; intros v_parent_path Hv_parent_path.
+        destruct Hv_parent_path as [Hv_parent_Some [Hv_parent_reachable Hvpp_length]].
+        destruct (HparentPaths _ _ Hv_parent_Some) as [_ Hv_parent_shortest].
+        assert (reachableUsing g s v (v :: v_parent_path)) as HvReachable
+          by admit.
+        replace lv with (S (length v_parent_path)) by auto; clear Hvpp_length.
+        assert (forall a b, a >= b -> S a >= S b) as HgeS by crush.
+        assert (forall a b, a >= b -> forall a0, a0 + a >= b) as HgePlus by crush.
+        assert (length p_in >= length v_parent_path);
+          [|subst;rewrite app_length; rewrite plus_comm; simpl;
+            rewrite plus_comm; apply HgeS; apply HgePlus; auto].
+        admit. (* FIXME: this does not seem to work *)
       } {
         destruct HuReachable.
-        injection Hvp; intros; subst; constructor.
+        injection Hvp; intro; subst; split.
+        - constructor.
+        - intros. simpl. destruct (length p'); crush.
       }
     }
     remember (traceParent parent v) as tracePv; destruct tracePv; [|inversion Hvp].
     myinj' Hvp.
     symmetry in HeqtracePv.
-    eapply HparentReachable; trivial.
+    eapply HparentPaths; trivial.
   }
-
   Unfocus. (* base case: our invariants imply the conclusion *)
   
   intros; splitHs;
@@ -1147,7 +1174,8 @@ Lemma bfs_corr:
   rename H1 into HfrontierParents;
   rename H2 into HfrontierSorted;
   rename H3 into HparentExpanded;
-  rename H4 into HparentReachable;
+  rename H4 into HparentSome;
+  rename H5 into HparentPaths;
   split.
 
   {
@@ -1169,5 +1197,9 @@ Lemma bfs_corr:
     exists p. splitHs; auto.
   }
 
+  {
+    intros d p' Hp'.
+    exact (HparentPaths d p' Hp').
+  }
 
 Qed.
