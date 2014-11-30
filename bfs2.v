@@ -484,7 +484,7 @@ Lemma frontieradd_keeps_old :
   In (v, res) frontierRemaining -> In (v, res) frontier'.
 Proof.
   intros.
-  eapply insert_many_corr. apply H. right. auto.
+  eapply insert_many_in. apply H. right. auto.
 Qed.
 
 (* inlining bfs_step to bfs did NOT give us functional induction, but
