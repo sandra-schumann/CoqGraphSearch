@@ -825,8 +825,12 @@ Lemma bfs_corr:
         specialize (HfrontierParents _ _ _ Hfrontier_v); crush.
       } 
       (* *)
-      assert (lv >= lu) by
-        admit.
+      assert (lv >= lu).
+        simpl in HIn. destruct HIn as [HIn | HIn].
+          inversion HIn. omega.
+          assert (foundPathLen (v,(vpp,lv)) >= foundPathLen (u, (Some u_parent, lu))).
+          apply HextractMin. simpl in *. auto.
+          unfold foundPathLen in H1. simpl in H1. auto.
       splitHs; repeat split; auto.
       subst. simpl. destruct (node_eq_dec u u); [|crush].
       destruct (traceParent parent u_parent); [|congruence].
