@@ -634,11 +634,7 @@ Lemma bfs_corr:
           traceParent parent u = Some p /\ shortestPath g s v (v::p) /\ length (v::p) = l
       end
   ) /\ (
-    forall v p, traceParent parent v = Some p -> ~ In v unexpanded
-  ) /\ (
     sorted foundPathLen frontier
-  ) /\ (
-    forall v, In v unexpanded -> In v (keys g)
   ))
     -> forall ret, bfs g unexpanded frontier parent = ret ->
   ((
@@ -651,9 +647,7 @@ Lemma bfs_corr:
   intros; eelim IHl; clear IHl; repeat split; [..|eauto]; auto; splitHs;
     [intro x; exists x; subst; assumption|..];
   rename H2 into HfrontierParents;
-  rename H3 into HparentExpanded;
-  rename H4 into HfrontierSorted;
-  rename H5 into HunexpandedNodes;
+  rename H3 into HfrontierSorted;
   clear dependent p'; clear dependent d; clear dependent ret;
   expandBFS;
   rename H0 into HparentPrepend;
@@ -782,6 +776,8 @@ Lemma bfs_corr:
     revert Hfrontier_split; intro; revert HfrontierInsert; intro.
     generalize (HfrontierParents v vp vl); intro Hfrontier.
     intros Hin.
+
+      (*
     destruct (node_in_dec v neighbors). Focus 2.
       assert (In (v, (vp, vl)) frontier) as HinOld by
         (* this iteration did not add it, so it must have been in frontier before *)
@@ -797,6 +793,18 @@ Lemma bfs_corr:
       rewrite <- HparentPrepend; simpl.
       destruct (node_eq_dec n2 u); [|rewrite Hfrontier]; pv;
     fail "end Focus 2".
+
+    destruct vp. Focus 2. (* everything we add has a parent *)
+    rewrite <- HfrontierInsert in Hin.
+    *)
+    admit.
   }
+
+  {
+    (* sorted frontier'*)
+    admit.
+  }
+
+  Unfocus. (* base case: our invariants imply the conclusion *)
 
 Qed.
