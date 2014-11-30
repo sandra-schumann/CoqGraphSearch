@@ -783,27 +783,22 @@ Lemma bfs_corr:
     generalize (HfrontierParents v vp vl); intro Hfrontier.
     intros Hin.
 
-      (*
-    destruct (node_in_dec v neighbors). Focus 2.
-      assert (In (v, (vp, vl)) frontier) as HinOld by
-        (* this iteration did not add it, so it must have been in frontier before *)
-        admit.
-      specialize (Hfrontier HinOld).
-      destruct vp; [|eauto].
+    destruct (in_many_insert foundPathLen _ _ _ HfrontierInsert _ Hin) as [Hew|Halready].
+    Focus 2. (* if the node was already in the frontier, true by invariant *)
+      assert (frontier = (discarded ++ [(u, pu)]) ++ frontierRemaining) as Hfrontier_split2 by crush.
+      remember (in_or_app (discarded++[(u,pu)]) _ _ (or_intror Halready)) as Hbefore; clear HeqHbefore.
+      rewrite <- Hfrontier_split2 in Hbefore.
+      specialize (Hfrontier Hbefore); clear Hin Halready Hbefore Hfrontier_split2.
+      destruct vp; [|auto].
       elim Hfrontier; clear Hfrontier; intros p Hfrontier.
       exists p. split; try solve [splitHs; eauto].
       destruct Hfrontier as [Hfrontier _].
-      assert (n2 <> u) by (
-        intro Heq; replace n2 with u in * by Heq; clear Heq;
-        destruct (HparentExpanded _ _ Hfrontier HminUnexpanded)).
       rewrite <- HparentPrepend; simpl.
-      destruct (node_eq_dec n2 u); [|rewrite Hfrontier]; pv;
+      destruct (node_eq_dec n1 u); [|rewrite Hfrontier]; pv.
+      replace n1 with u in * by assumption; clear e.
+      admit; (* destruct (HparentExpanded _ _ Hfrontier HminUnexpanded)); crush. *)
     fail "end Focus 2".
 
-    destruct vp. Focus 2. (* everything we add has a parent *)
-    rewrite <- HfrontierInsert in Hin.
-    *)
-    admit.
   }
 
   {
