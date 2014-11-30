@@ -735,7 +735,7 @@ Lemma bfs_corr:
       then exists p_in v p_out, p' = p_out ++ v::p_in
            /\ In v unexpanded
            /\ (forall w, In w (p_out) -> In w unexpanded)
-           /\ exists vp, In (v, vp) frontier
+           /\ exists l, In (v, (hd_error p_in, l)) frontier
       else exists p, traceParent parent d = Some p
   ) /\ (
     forall v parentPointer l, In (v, (parentPointer, l)) frontier ->
@@ -1041,8 +1041,6 @@ Lemma bfs_corr:
         elim Hv_parent; clear Hv_parent; intros v_parent_path Hv_parent_path.
         destruct Hv_parent_path as [Hv_parent_Some [Hv_parent_reachable Hvpp_length]].
         destruct (HparentPaths _ _ Hv_parent_Some) as [_ Hv_parent_shortest].
-        assert (reachableUsing g s v (v :: v_parent_path)) as HvReachable
-          by admit.
         replace lv with (S (length v_parent_path)) by auto; clear Hvpp_length.
         assert (forall a b, a >= b -> S a >= S b) as HgeS by crush.
         assert (forall a b, a >= b -> forall a0, a0 + a >= b) as HgePlus by crush.
