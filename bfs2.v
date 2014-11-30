@@ -681,11 +681,10 @@ Proof.
 Qed.
 
 Lemma lookup_neighbors: 
-  forall g u neighbors, lookup g u = Some neighbors -> forall v, In v neighbors -> hasEdge g u v.
-Admitted.
-
-Lemma not_None : forall {A:Type} (sx:option A), sx <> None -> exists x, sx = Some x.
-  intros. destruct sx; [|congruence]. eauto.
+  forall g u neighbors, lookup g u = Some neighbors ->
+  forall v, In v neighbors -> hasEdge g u v.
+Proof.
+  intros. unfold hasEdge in *. exists neighbors. split; auto.
 Qed.
 
 Notation shortestPath g s d p := (
