@@ -668,11 +668,7 @@ Lemma bfs_corr:
           traceParent parent u = Some p /\ shortestPath g s v (v::p) /\ length (v::p) = l
       end
   ) /\ (
-    forall v p, traceParent parent v = Some p -> ~ In v unexpanded
-  ) /\ (
     sorted foundPathLen frontier
-  ) /\ (
-    forall v, In v unexpanded -> In v (keys g)
   ))
     -> forall ret, bfs g unexpanded frontier parent = ret ->
   ((
@@ -685,9 +681,7 @@ Lemma bfs_corr:
   intros; eelim IHl; clear IHl; repeat split; [..|eauto]; auto; splitHs;
     [intro x; exists x; subst; assumption|..];
   rename H2 into HfrontierParents;
-  rename H3 into HparentExpanded;
-  rename H4 into HfrontierSorted;
-  rename H5 into HunexpandedNodes;
+  rename H3 into HfrontierSorted;
   clear dependent p'; clear dependent d; clear dependent ret;
   expandBFS;
   rename H0 into HparentPrepend;
@@ -816,21 +810,30 @@ Lemma bfs_corr:
     revert Hfrontier_split; intro; revert HfrontierInsert; intro.
     generalize (HfrontierParents v vp vl); intro Hfrontier.
     intros Hin.
-    destruct (node_in_dec v neighbors). Focus 2.
-      assert (In (v, (vp, vl)) frontier) as HinOld by
-        (* this iteration did not add it, so it must have been in frontier before *)
-        admit.
-      specialize (Hfrontier HinOld).
-      destruct vp; [|eauto].
+
+    destruct (in_many_insert foundPathLen _ _ _ HfrontierInsert _ Hin) as [Hew|Halready].
+    Focus 2. (* if the node was already in the frontier, true by invariant *)
+      assert (frontier = (discarded ++ [(u, pu)]) ++ frontierRemaining) as Hfrontier_split2 by crush.
+      remember (in_or_app (discarded++[(u,pu)]) _ _ (or_intror Halready)) as Hbefore; clear HeqHbefore.
+      rewrite <- Hfrontier_split2 in Hbefore.
+      specialize (Hfrontier Hbefore); clear Hin Halready Hbefore Hfrontier_split2.
+      destruct vp; [|auto].
       elim Hfrontier; clear Hfrontier; intros p Hfrontier.
       exists p. split; try solve [splitHs; eauto].
       destruct Hfrontier as [Hfrontier _].
-      assert (n2 <> u) by (
-        intro Heq; replace n2 with u in * by Heq; clear Heq;
-        destruct (HparentExpanded _ _ Hfrontier HminUnexpanded)).
       rewrite <- HparentPrepend; simpl.
-      destruct (node_eq_dec n2 u); [|rewrite Hfrontier]; pv;
+      destruct (node_eq_dec n1 u); [|rewrite Hfrontier]; pv.
+      replace n1 with u in * by assumption; clear e.
+      admit; (* destruct (HparentExpanded _ _ Hfrontier HminUnexpanded)); crush. *)
     fail "end Focus 2".
+
   }
+
+  {
+    (* sorted frontier'*)
+    admit.
+  }
+
+  Unfocus. (* base case: our invariants imply the conclusion *)
 
 Qed.
