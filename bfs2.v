@@ -730,8 +730,12 @@ Qed.
 Lemma contains_sth_is_not_empty : forall {A} xs (x:A) ys, xs++(x::ys) <> [].
 Proof. induction xs; crush. Qed.
 
-Lemma last_subst_into : forall {A} a (x:A) y b, a++[x] = y::b ->
+Lemma last_subst_into' : forall {A} a (x:A) y b, a++[x] = y::b ->
   forall c, a++(x::c) = y::(b++c).
+Proof. induction a; intros; crush. Qed.
+
+Lemma last_subst_into : forall {A} a (x:A) b, a++[x] = b ->
+  forall c, a++(x::c) = b++c.
 Proof. induction a; intros; crush. Qed.
 
 Lemma nonempty_has_last : forall {A} (xs : list A), xs <> [] ->
@@ -770,6 +774,29 @@ Proof.
     inversion H6. subst. apply H0; auto.
   apply nonempty_has_last. auto.
 Qed.
+
+Lemma in_path_edge :
+  forall p' p a b p'' p''', p = ((p' ++ [a]) ++ b :: p'') ++ p''' ->
+  forall g s d, reachableUsing g s d p ->
+  hasEdge g b a.
+Proof.
+  induction p'; intros.
+  simpl in H. inversion H0; subst. crush.
+  subst. inversion H6. subst. inversion H1; subst. auto.
+  inversion H0; subst. inversion H4.
+  inversion H6.
+  apply (IHp' p0 a0 b p'' p''' H4 g s d0 H1).
+Qed.
+
+Lemma edge_in_neigh : forall g a neigh,
+  lookup g a = Some neigh -> forall b, hasEdge g a b -> In b neigh.
+Proof.
+  intros. unfold hasEdge in *. elim H0; intros.
+  destruct H1 as [H2 H3]. rewrite H2 in H. inversion H. subst; auto.
+Qed.
+
+Lemma last_means_in : forall {A} a b (x:A), a = b++[x] -> In x a.
+Proof. induction b; crush. Qed.
 
 Lemma bfs_corr:
   forall (g:graph) (s:node),
@@ -918,30 +945,17 @@ Lemma bfs_corr:
           * rewrite e in *.
             assert (exists v'' p_out'', p_out' = p_out'' ++ [v'']).
             eapply dest_different_end_nonempty; eauto.
-    
-    
-
-
-              induction p_out'.
-                (* d is the destination;
-                   d is not u,
-                   but u is head (p_out++[v])
-                   and thus head p';
-                   contradiction *)
-                simpl in Hp_split'.
-                assert (p' <> []). rewrite Hp_split. apply contains_sth_is_not_empty.
-                elim (reachableUsing_head _ _ _ _ Hp' H0); intros.
-                rewrite (last_subst_into _ _ _ _ Hp_split') in Hp_split.
-                rewrite Hp_split in H1. inversion H1. rewrite H3 in n1. crush.
-                
-                admit.
             elim H0; clear H0; intros v'' H0; elim H0; clear H0; intros p_out'' H0.
             rewrite H0 in Hp_split'.
+            rewrite (last_subst_into _ _ _ Hp_split') in Hp_split.
             (* Hp_split' in this form means edge between u and v'' *)
+            remember (in_path_edge _ _ _ _ _ _ Hp_split _ _ _ Hp') as Hedge.
             (* edge from u to v'' means In v'' neighbors *)
+            remember (edge_in_neigh _ _ _ Heqk _ Hedge) as Hneigh.
             (* v'' is in p_out' *)
+            assert (In v'' p_out'). eapply last_means_in. eauto.
             (* contradiction from Hws' *)
-            admit.
+            remember (Hws' _ H1 Hneigh) as Hcontra. inversion Hcontra. 
           * eapply (remove_preserves _ _ _ HunepandedRemove).
             auto. destruct (node_eq_dec v' v). rewrite e; auto.
             apply HwUnexpanded.
