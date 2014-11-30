@@ -726,6 +726,112 @@ Notation shortestPath g s d p := (
   /\
   (forall p', reachableUsing g s d p' -> length p' >= length p)).
 
+Lemma reachableUsing_head: forall g s d p, reachableUsing g s d p ->
+  p <> [] -> exists t, p = d::t.
+Proof.
+  induction p; intros; simpl in *.
+  - crush.
+  - exists p. assert (a = d). inversion H. crush. crush.
+Qed.
+
+Lemma contains_sth_is_not_empty : forall {A} xs (x:A) ys, xs++(x::ys) <> [].
+Proof. induction xs; crush. Qed.
+
+Lemma last_subst_into' : forall {A} a (x:A) y b, a++[x] = y::b ->
+  forall c, a++(x::c) = y::(b++c).
+Proof. induction a; intros; crush. Qed.
+
+Lemma last_subst_into : forall {A} a (x:A) b, a++[x] = b ->
+  forall c, a++(x::c) = b++c.
+Proof. induction a; intros; crush. Qed.
+
+Lemma nonempty_has_last : forall {A} (xs : list A), xs <> [] ->
+  exists x xs', xs = xs' ++ [x].
+Proof.
+  induction xs; intros. unfold not in H. assert False. apply H. auto. inversion H0.
+  destruct xs. exists a. exists []. auto.
+  assert (a0::xs <> []). unfold not; intros. inversion H0.
+  elim (IHxs H0); intros. elim H1; intros.
+  rewrite H2.
+  exists x. exists (a::x0). auto.
+Qed.
+
+Lemma dest_different_end_nonempty : forall p_out' g s d p',
+  reachableUsing g s d p' ->
+  forall u, u <> d ->
+  forall p_out v p_in, p' = p_out ++ v :: p_in ->
+  forall p_skip, p_out ++ [v] = p_out' ++ u :: p_skip ->
+  exists v'' p_out'', p_out' = p_out'' ++ [v''].
+Proof.
+  intros.
+  assert (p_out <> []). unfold not; intros. rewrite H3 in *; clear H3.
+    simpl in *.
+    assert (p' <> []). rewrite H1. unfold not; intros. inversion H3.
+    elim (reachableUsing_head _ _ _ _ H H3); intros.
+    destruct p_out'. inversion H2. subst. inversion H1. crush.
+    inversion H2. remember (contains_sth_is_not_empty p_out' u p_skip) as H8.
+    crush.
+  destruct p_out; crush.
+  assert (p_out' <> []). unfold not; intros. rewrite H1 in *; clear H1.
+    simpl in *.
+    inversion H2.
+    assert (n :: p_out ++ v :: p_in <> []).
+      unfold not; intros. inversion H1.
+    elim (reachableUsing_head _ _ _ _ H H1); intros.
+    inversion H6. subst. apply H0; auto.
+  apply nonempty_has_last. auto.
+Qed.
+
+Lemma in_path_edge :
+  forall p' p a b p'' p''', p = ((p' ++ [a]) ++ b :: p'') ++ p''' ->
+  forall g s d, reachableUsing g s d p ->
+  hasEdge g b a.
+Proof.
+  induction p'; intros.
+  simpl in H. inversion H0; subst. crush.
+  subst. inversion H6. subst. inversion H1; subst. auto.
+  inversion H0; subst. inversion H4.
+  inversion H6.
+  apply (IHp' p0 a0 b p'' p''' H4 g s d0 H1).
+Qed.
+
+Lemma edge_in_neigh : forall g a neigh,
+  lookup g a = Some neigh -> forall b, hasEdge g a b -> In b neigh.
+Proof.
+  intros. unfold hasEdge in *. unfold lookupDefault in *.
+  rewrite H in *. auto.
+Qed.
+
+Lemma last_means_in : forall {A} a b (x:A), a = b++[x] -> In x a.
+Proof. induction b; crush. Qed.
+
+Lemma in_partitioning : forall {A} xs (x:A), In x xs ->
+  exists xs1 xs2, xs = xs1++x::xs2.
+Proof.
+  induction xs; intros. inversion H.
+  inversion H. exists []. exists xs. crush.
+  elim (IHxs _ H0); intros. elim H1; intros. exists (a::x0). exists x1. crush.
+Qed.
+
+Lemma not_last_in_front : forall {A} xs (x:A) ys y ys',
+  xs ++ [x] = ys ++ (y::ys') -> forall a, In a ys -> In a xs.
+Proof.
+  induction xs; induction ys; intros; simpl in *.
+  - inversion H0.
+  - inversion H. remember (contains_sth_is_not_empty ys y ys') as H4.
+    crush.
+  - inversion H0.
+  - inversion H. destruct H0 as [H0 | H0].
+    left. auto.
+    right. eapply IHxs. apply H3. auto.
+Qed.
+
+Lemma in_with_map : forall {A} v neighs, In (v:A) neighs ->
+  forall {B} (w:B), In (v,w) (map (fun x => (x,w)) neighs).
+Proof.
+  induction neighs; intros; crush.
+Qed.
+
 Lemma bfs_corr:
   forall (g:graph) (s:node),
   forall (unexpanded:list node) (frontier:list found) (parent:list found),
@@ -845,11 +951,73 @@ Lemma bfs_corr:
         - replace (p_out ++ v::p_in) with (p_out ++ [v] ++ p_in) in * by crush.
           rewrite app_assoc in *. rewrite Hp_split' in *.
           rewrite Hp_split. rewrite <- app_assoc. apply f_equal. reflexivity.
-        - admit. (* u cannot be last (u <> d). if us was in v', the thing after u would be v' *)
-        - admit.
+        - destruct (node_eq_dec v' u).
+          (* u cannot be last (u <> d). if us was in v', the thing after u would be v' *)
+          * rewrite e in *.
+            assert (exists v'' p_out'', p_out' = p_out'' ++ [v'']).
+            eapply dest_different_end_nonempty; eauto.
+            elim H0; clear H0; intros v'' H0; elim H0; clear H0; intros p_out'' H0.
+            rewrite H0 in Hp_split'.
+            rewrite (last_subst_into _ _ _ Hp_split') in Hp_split.
+            (* Hp_split' in this form means edge between u and v'' *)
+            remember (in_path_edge _ _ _ _ _ _ Hp_split _ _ _ Hp') as Hedge.
+            (* edge from u to v'' means In v'' neighbors *)
+            remember (edge_in_neigh _ _ _ Heqk _ Hedge) as Hneigh.
+            (* v'' is in p_out' *)
+            assert (In v'' p_out'). eapply last_means_in. eauto.
+            (* contradiction from Hws' *)
+            remember (Hws' _ H1 Hneigh) as Hcontra. inversion Hcontra. 
+          * eapply (remove_preserves _ _ _ HunepandedRemove).
+            auto. destruct (node_eq_dec v' v). rewrite e; auto.
+            apply HwUnexpanded.
+            assert (In v' (p_out'++v'::p_skip)) by crush.
+            rewrite <- Hp_split' in H0.
+            
+            Lemma in_front : forall {A} (y:A) (x:A) (xs:list A),
+              In y (xs++[x]) -> In y xs \/ y = x.
+            Proof. induction xs; crush. Qed.
+            
+            destruct (in_front _ _ _ H0) as [H1 | H1]; crush.
+        - intros.
+          destruct (node_eq_dec w u).
+          * (* pretty much the same as in the previous part
+               but replace all equations about partitioning p
+               and partition with w instead *)
+            assert (In w p_out). eapply not_last_in_front. apply Hp_split'. auto.
+            rename H0 into Hw_out'. rename H1 into Hw_out.
+            assert (exists p_wout p_win', p_out'= p_wout ++ (w::p_win')).
+            apply in_partitioning. auto.
+            elim H0; clear H0; intros p_wout H0;
+            elim H0; clear H0; intros p_win' Hout_split.
+            assert (exists p_wskip, p_out ++ [v] = p_wout ++ w::p_wskip).
+            rewrite Hout_split in Hp_split'. exists (p_win' ++ v'::p_skip).
+            crush. elim H0; clear H0; intros p_wskip Hp_wsplit'.
+
+            rewrite e in *.
+            assert (exists v'' p_out'', p_wout = p_out'' ++ [v'']).
+            eapply dest_different_end_nonempty; eauto.
+            elim H0; clear H0; intros v'' H0; elim H0; clear H0; intros p_out'' H0.
+            rewrite H0 in Hp_wsplit'.
+            rewrite (last_subst_into _ _ _ Hp_wsplit') in Hp_split.
+            (* Hp_split' in this form means edge between u and v'' *)
+            remember (in_path_edge _ _ _ _ _ _ Hp_split _ _ _ Hp') as Hedge.
+            (* edge from u to v'' means In v'' neighbors *)
+            remember (edge_in_neigh _ _ _ Heqk _ Hedge) as Hneigh.
+            (* v'' is in p_out' *)
+            assert (In v'' p_wout). eapply last_means_in. eauto.
+            (* additional step: everything in p_wout is in p_out' *)
+            assert (In v'' p_out'). crush.
+            (* contradiction from Hws' *)
+            remember (Hws' _ H2 Hneigh) as Hcontra. inversion Hcontra.
+          * intros.
+            assert (In w unexpanded -> In w unexpanded').
+              intro. eapply remove_preserves; eauto.
+            apply H1. apply HwUnexpanded. eapply not_last_in_front; eauto.
+
         - rewrite <- HfrontierInsert. exists (Some u, S (foundPathLen (u, pu))).
           (* insert along with other things, and guess what, it is in there *)
-          admit.
+          eapply insert_many_in. auto.
+          left. apply in_with_map. auto.
       }
 
       assert (forall w, In w p_out -> u<>w) (* if u was in p_out then the next thing would be in neihgbours *)
