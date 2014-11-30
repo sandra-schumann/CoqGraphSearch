@@ -16,3 +16,8 @@ lookup
      (map (fun v0 : node => (v0, (Some u, S (foundPathLen (u, pu)))))
         neighbors)) v = Some (Some u, S (foundPathLen (u, pu)))
 
+
+
+Hfrontier : traceParent parent u = Some p
+========================
+In (u, pu) parent        
