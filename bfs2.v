@@ -1020,8 +1020,26 @@ Lemma bfs_corr:
           left. apply in_with_map. auto.
       }
 
-      assert (forall w, In w p_out -> u<>w) (* if u was in p_out then the next thing would be in neihgbours *)
-        by admit.
+      assert (forall w, In w p_out -> u<>w).
+        (* if u was in p_out then the next thing would be in neihgbours *)
+        (* ok this has been done twice already. FIXME: pull it all out and do it once? *)
+        unfold not. intros. rewrite <- H1 in *. clear H1.
+        remember (in_partitioning _ _ H0) as Helim. clear HeqHelim.
+        elim Helim; clear Helim; intros p_out' Helim;
+        elim Helim; clear Helim; intros p_skip Hp_split'.
+(*        rewrite Hp_split' in Hp_split.
+        (* Hp_split' in this form means edge between u and v'' *)
+        remember (in_path_edge _ _ _ _ _ _ Hp_split _ _ _ Hp') as Hedge.
+        (* edge from u to v'' means In v'' neighbors *)
+        remember (edge_in_neigh _ _ _ Heqk _ Hedge) as Hneigh.
+        (* v'' is in p_out' *)
+        assert (In v'' p_wout). eapply last_means_in. eauto.
+        (* additional step: everything in p_wout is in p_out' *)
+        assert (In v'' p_out'). crush.
+        (* contradiction from Hws' *)
+        remember (Hws' _ H2 Hneigh) as Hcontra. inversion Hcontra.
+
+        by admit. *) admit.
       assert (u <> v) (* if v=u and p_out=nil then d=u; otherwise (last p_out) in neighbors *)
         by admit.
 
