@@ -702,12 +702,17 @@ Proof.
   intros. apply (H0 n1 np). right. auto.
 Qed.
 
-Lemma Hfrontier : forall parent u p pu,
-  traceParent parent u = Some p -> In (u, pu) parent.
+Lemma traceparent_in : forall parent u p,
+  traceParent parent u = Some p -> exists pu, In (u, pu) parent.
 Proof.
   induction parent; intros; simpl in *. inversion H.
-  destruct a. destruct (node_eq_dec u n).
-Abort. (* Needs something about pu *)
+  destruct a. destruct (node_eq_dec u n). exists p0.
+  left. rewrite e. apply f_equal. auto.
+  remember (traceParent parent u) as pu. destruct pu.
+  symmetry in Heqpu. rewrite H in Heqpu.
+  elim (IHparent _ _ Heqpu); intros. exists x. right. auto.
+  inversion H.
+Qed.
 
 Notation shortestPath g s d p := (
   reachableUsing g s d p
@@ -898,9 +903,9 @@ Lemma bfs_corr:
       destruct (node_eq_dec n1 u); [|rewrite Hfrontier]; pv.
       replace n1 with u in * by assumption; clear e.
       assert False; [|pv].
-      apply (fun pf => HparentExpanded u pu pf HminUnexpanded).
-      admit; (* traceParent parent u = Some p -> In (u, pu) parent. NOTE: this apears again below *)
-    fail "end Focus 2".
+      elim (traceparent_in _ _ _ Hfrontier); intros.
+      apply (fun pf => HparentExpanded u x pf HminUnexpanded). auto.
+      (* traceParent parent u = Some p -> In (u, pu) parent. NOTE: this apears again below *)
 
     (* TODO: refactor some of the next lines, they appear again below...*)
     assert (In (u,pu) frontier) as HuInFrontier.
@@ -973,9 +978,9 @@ Lemma bfs_corr:
       simpl. destruct (node_eq_dec v); [|rewrite Htracep; auto].
       rewrite e in *; clear e.
       assert False; [|pv].
-      apply (fun pf => HparentExpanded u pu pf HminUnexpanded).
-      admit; (* traceParent parent u = Some p -> In (u, pu) parent. NOTE: this apears above *)
-    fail "end Focus2".
+      elim (traceparent_in _ _ _ Htracep); intros.
+      apply (fun pf => HparentExpanded u x pf HminUnexpanded). auto.
+
     myinj' Heq.
     assert (In (u,pu) frontier) as HuInFrontier.
       rewrite Hfrontier_split; apply in_or_app; right; left; crush.
