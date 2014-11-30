@@ -742,7 +742,9 @@ Lemma bfs_corr:
   ) /\ (
     forall n np, In (n, np) parent -> ~In n unexpanded
   ) /\ (
-    forall n np, In (n, np) parent -> exists p, traceParent parent n = Some p /\ reachableUsing g s n p
+    forall n np, In (n, np) parent -> exists p, traceParent parent n = Some p
+  ) /\ (
+    forall n  p, traceParent parent n = Some p -> reachableUsing g s n p
   ))
     -> forall ret, bfs g unexpanded frontier parent = ret ->
   ((
@@ -753,12 +755,13 @@ Lemma bfs_corr:
 .
   intros until parent.
   functional induction (bfs g unexpanded frontier parent). Focus 2.
-  intros until ret; eapply IHl.
+  intros until ret; eapply IHl; clear IHl.
   splitHs; repeat split;
   rename H0 into HfrontierParents;
   rename H1 into HfrontierSorted;
   rename H2 into HparentExpanded;
-  rename H3 into HparentReachable;
+  rename H3 into HparentSome;
+  rename H4 into HparentReachable;
   expandBFS;
   rename H0 into HparentPrepend;
   rename H1 into HfrontierInsert;
@@ -768,7 +771,7 @@ Lemma bfs_corr:
   destruct (closestUnexpanded foundPathLen unexpanded frontier); [|pv]; intro Hc;
   elim Hc; clear Hc; intros discarded Hc;
   destruct Hc as [Hfrontier_split [HdiscardedExpanded [HextractMin HminUnexpanded]]];
-  destruct p; destruct f; myinj' Heqc; destruct p).
+  try (destruct p; destruct f; myinj' Heqc; destruct p)).
 
   {
     remember H as Hd; clear HeqHd.
@@ -973,13 +976,14 @@ Lemma bfs_corr:
     (* *)
     destruct Heither as [Heq|Hin].
     Focus 2.
-      eelim HparentReachable; eauto; intros p Hp. destruct Hp as [Htracep Hreachable].
-      exists p. split; [|auto].
-      simpl. destruct (node_eq_dec v); [|rewrite Htracep; auto].
+      eelim HparentSome; eauto; intros p Hp.
+      exists p.
+      simpl. destruct (node_eq_dec v); [|rewrite Hp; auto].
       rewrite e in *; clear e.
       assert False; [|pv].
-      elim (traceparent_in _ _ _ Htracep); intros.
-      apply (fun pf => HparentExpanded u x pf HminUnexpanded). auto.
+      elim (traceparent_in _ _ _ Hp); intros.
+      apply (fun pf => HparentExpanded u x pf HminUnexpanded). auto;
+    fail "end Focus 2".
 
     myinj' Heq.
     assert (In (u,pu) frontier) as HuInFrontier.
@@ -997,6 +1001,34 @@ Lemma bfs_corr:
       exists [].
       splitHs; subst; split; auto; constructor.
     }
+  }
+  
+  {
+    rewrite <- HparentPrepend.
+    revert HparentReachable; intro.
+    intros v vp Hvp.
+    simpl in Hvp.
+    destruct (node_eq_dec v u). {
+      assert (In (u,pu) frontier) as HuInFrontier.
+        rewrite Hfrontier_split; apply in_or_app; right; left; crush.
+      destruct pu as [upptr ul].
+      generalize (HfrontierParents _ _ _ HuInFrontier) as HuReachable; intro.
+      generalize (lookup_neighbors _ _ _ Heqk) as HneighborEdges; intro.
+      rewrite <- e in *; clear e.
+      destruct upptr as [u_parent|]. {
+        elim HuReachable; clear HuReachable; intros u_parent_path Hu_parent_path.
+        destruct Hu_parent_path as [Hu_parent_Some [Hu_parent_reachable _]].
+        rewrite Hu_parent_Some in Hvp.
+        injection Hvp; clear Hvp; intro Heq; rewrite <- Heq. assumption.
+      } {
+        destruct HuReachable.
+        injection Hvp; intros; subst; constructor.
+      }
+    }
+    remember (traceParent parent v) as tracePv; destruct tracePv; [|inversion Hvp].
+    myinj' Hvp.
+    symmetry in HeqtracePv.
+    eapply HparentReachable; trivial.
   }
 
   Unfocus. (* base case: our invariants imply the conclusion *)
