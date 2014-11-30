@@ -798,8 +798,8 @@ Qed.
 Lemma edge_in_neigh : forall g a neigh,
   lookup g a = Some neigh -> forall b, hasEdge g a b -> In b neigh.
 Proof.
-  intros. unfold hasEdge in *. elim H0; intros.
-  destruct H1 as [H2 H3]. rewrite H2 in H. inversion H. subst; auto.
+  intros. unfold hasEdge in *. unfold lookupDefault in *.
+  rewrite H in *. auto.
 Qed.
 
 Lemma last_means_in : forall {A} a b (x:A), a = b++[x] -> In x a.
