@@ -506,18 +506,20 @@ Proof.
   intros. unfold extractMin in *. destruct xs; crush.
 Qed.
 
-Lemma closestUnexpanded_sorted : forall (f:found->nat) (unexpanded:list node)
-  (frontier : list found) (ret : found * list found),
-  sorted f frontier ->
-  closestUnexpanded f unexpanded frontier = Some ret ->
-  sorted f (snd ret).
-Proof.
-  intros. functional induction (closestUnexpanded f unexpanded frontier);
-  inversion H0.
-  - subst. simpl in *.
-    unfold extractMin in *. destruct frontier; crush.
-  - apply IHo. destruct frontier; crush. crush.
-Qed. 
+Lemma insert_many_sorted:
+  forall {A:Type} (f:A->nat) olds news, 
+    sorted f olds -> sorted f (fold_right (insert f) olds news).
+  Hint Resolve insert_sorted.
+  induction news; crush.
+  Remove Hints insert_sorted.
+Qed.
+
+Lemma app_right_sorted:
+  forall {A:Type} (f:A->nat) xs ys, sorted f (xs ++ ys) -> sorted f ys.
+  Hint Resolve sorted_tail.
+  induction xs; crush.
+  Remove Hints sorted_tail.
+Qed.
 
 Lemma frontieradd_keeps_old :
   forall frontierRemaining frontier' u pu neighbors v res,
@@ -1180,7 +1182,11 @@ Lemma bfs_corr:
 
   {
     (* sorted frontier'*)
-    admit.
+    rewrite <- HfrontierInsert.
+    eapply insert_many_sorted; eauto.
+    assert (sorted foundPathLen ((u, pu) :: frontierRemaining))
+      by (subst; eauto using app_right_sorted).
+    eauto using sorted_tail.
   }
 
   { (* every node in parent is expanded *)
@@ -1380,7 +1386,27 @@ Proof.
   induction 1; crush. specialize (hasEdge_in_nodes g u v); crush.
 Qed.
 
+Lemma reachableUsing_path_in_nodes:
+  forall g u v p, reachableUsing g u v p ->
+  forall w, In w (removelast p) -> In w (nodes g).
+Proof.
+  induction 1; [crush|].
+  intros.
+  destruct p; [crush|].
+  replace (removelast (v :: n :: p)) with (v::removelast (n :: p)) in * by crush.
+  destruct H1; [|eauto]; clear IHreachableUsing.
+  subst. eapply hasEdge_in_nodes; eauto.
+Qed.
+
 Definition bfs' g s := bfs g (s::nodes g) [(s,(None,1))] [].
+
+Lemma reachableUsing_tail: forall g s d p, reachableUsing g s d p -> p = removelast p ++ [s].
+  (* XXX: crush hangs here *)
+  induction 1; [reflexivity|].
+  simpl in *; destruct p; [unfold not; intros; subst; simpl in *; congruence|].
+  rewrite <- app_comm_cons.
+  apply f_equal; apply IHreachableUsing.
+Qed.
 
 Lemma bfs_corr':
   forall (g:graph) (s:node) ret, bfs' g s = ret ->
@@ -1393,10 +1419,10 @@ Lemma bfs_corr':
   intros.
   eapply bfs_corr; [|apply H]; clear H; repeat split; intros; try solve [pv].
   { destruct (node_in_dec d (s::nodes g)).
-    - exists []. exists s. exists (tail p'). repeat split.
-      + admit.
+    - exists []. exists s. exists (removelast p'). repeat split.
+      + eapply reachableUsing_tail; eauto.
       + left; reflexivity.
-      + admit.
+      + intros. right. eapply reachableUsing_path_in_nodes; eauto.
       + exists 1. left; reflexivity.
     - assert False; [|pv]; apply n.
       destruct (node_eq_dec s d).
