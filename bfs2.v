@@ -637,27 +637,27 @@ Proof.
   subst. crush. crush. crush.
 Qed.
 
-Lemma HextendFrontier : forall ws (v:node) neighbors,
-  (exists pre v' post, ws++[v]=post++v'::pre /\ In v' neighbors
-  /\ (forall w, In w post -> ~In w neighbors))
+Lemma HextendFrontier : forall {A} ws (v:node) frontier,
+  (exists pre v' post, ws++[v]=post++v'::pre /\ In v' (@keys A frontier)
+  /\ (forall w, In w post -> ~In w (keys frontier)))
   \/
-  (~In v neighbors /\ forall w, In w ws -> ~In w neighbors).
+  (~In v (keys frontier) /\ forall w, In w ws -> ~In w (keys frontier)).
 Proof.
   intros. induction ws; simpl in *.
   - (* base case *)
-    destruct (node_in_dec v neighbors).
+    destruct (node_in_dec v (keys frontier)).
     + left. exists []; exists v; exists []. simpl in *; auto.
     + right. split; crush.
   - (* inductive case *)
     destruct IHws as [IHws | IHws].
-    + left. destruct (node_in_dec a neighbors).
+    + left. destruct (node_in_dec a (keys frontier)).
       * exists (ws++[v]); exists a; exists []. simpl in *. repeat split.
         auto. intros. inversion H.
       * repeat (elim IHws; clear IHws; intro; intro IHws).
         exists x. exists x0. exists (a::x1). repeat split; simpl in *; auto.
         rewrite H. auto. intros. destruct H1 as [H1 | H1].
         rewrite H1 in *. auto. apply IHws. auto.
-    + destruct (node_in_dec a neighbors).
+    + destruct (node_in_dec a (keys frontier)).
       * left. exists (ws++[v]); exists a; exists []. simpl in *. repeat split.
         auto. intros. inversion H.
       * right. destruct IHws as [IHws1 IHws2]. split. auto. intros.
@@ -832,6 +832,34 @@ Proof.
   induction neighs; intros; crush.
 Qed.
 
+Lemma in_neigh_in_map : forall {A B:Type} (w:A) (pv:B) neigh,
+  In w neigh -> In (w,pv) (map (fun w => (w,pv)) neigh).
+Proof.
+  induction neigh; intros; simpl in *.
+  - inversion H.
+  - destruct H as [H | H]; auto.
+    left; rewrite H in *; apply f_equal; auto.
+Qed.
+
+Lemma in_map_in_keys : forall {A:Type} w (pv:A) fr', In (w,pv) fr' ->
+  In w (keys fr').
+Proof.
+  induction fr'; intros; simpl in *.
+  - inversion H.
+  - destruct H as [H | H]; auto.
+    inversion H; left; auto.
+Qed.
+
+Lemma in_neigh_in_frontier' : forall {A} f fr (pv:A) neigh fr' v,
+  In v neigh ->
+  fold_right (insert f) fr (map (fun w => (w,pv)) neigh) = fr' ->
+  In v (keys fr').
+Proof.
+  intros. eapply in_map_in_keys.
+  eapply insert_many_in; eauto.
+  left; apply in_neigh_in_map; auto.
+Qed.
+
 Lemma bfs_corr:
   forall (g:graph) (s:node),
   forall (unexpanded:list node) (frontier:list found) (parent:list found),
@@ -942,7 +970,7 @@ Lemma bfs_corr:
       } 
       (* *)
 
-      destruct (HextendFrontier p_out v neighbors) as [Hv'|HnoInterference]. {
+      destruct (HextendFrontier p_out v frontier') as [Hv'|HnoInterference]. {
         elim Hv'; clear Hv'; intros p_skip Hv'.
         elim Hv'; clear Hv'; intros v' Hv'.
         elim Hv'; clear Hv'; intros p_out' Hv'.
@@ -953,21 +981,61 @@ Lemma bfs_corr:
           rewrite Hp_split. rewrite <- app_assoc. apply f_equal. reflexivity.
         - destruct (node_eq_dec v' u).
           (* u cannot be last (u <> d). if us was in v', the thing after u would be v' *)
-          * rewrite e in *.
-            assert (exists v'' p_out'', p_out' = p_out'' ++ [v'']).
-            eapply dest_different_end_nonempty; eauto.
-            elim H0; clear H0; intros v'' H0; elim H0; clear H0; intros p_out'' H0.
-            rewrite H0 in Hp_split'.
-            rewrite (last_subst_into _ _ _ Hp_split') in Hp_split.
-            (* Hp_split' in this form means edge between u and v'' *)
-            remember (in_path_edge _ _ _ _ _ _ Hp_split _ _ _ Hp') as Hedge.
-            (* edge from u to v'' means In v'' neighbors *)
-            remember (edge_in_neigh _ _ _ Heqk _ Hedge) as Hneigh.
-            (* v'' is in p_out' *)
-            assert (In v'' p_out'). eapply last_means_in. eauto.
-            (* contradiction from Hws' *)
-            remember (Hws' _ H1 Hneigh) as Hcontra. inversion Hcontra. 
-          * eapply (remove_preserves _ _ _ HunepandedRemove).
+          +
+
+Lemma HextendFrontier_not_u :
+  forall v' u g neighbors pu frontierRemaining frontier'
+  unexpanded unexpanded' d p' s p_out v p_in p_out' p_skip,
+  v' = u ->
+  (forall w : node, In w p_out' -> ~ In w (keys frontier')) ->
+  p_out ++ [v] = p_out' ++ v' :: p_skip ->
+  (forall w : node, In w p_out -> In w unexpanded) ->
+  p' = p_out ++ v :: p_in ->
+  u <> d -> 
+  reachableUsing g s d p' ->
+  remove node_eq_dec u unexpanded = unexpanded' ->
+  fold_right (insert foundPathLen) frontierRemaining
+    (map
+      (fun v : node =>
+        (v, (Some u, S (foundPathLen (u, pu))))) neighbors) =
+    frontier' ->
+  lookup g u = Some neighbors ->
+  False.
+Proof.
+  intros.
+  rename H into e.
+  rename H0 into Hws'.
+  rename H1 into Hp_split'.
+  rename H2 into HwUnexpanded.
+  rename H3 into Hp_split.
+  rename H4 into n1.
+  rename H5 into Hp'.
+  rename H6 into HunepandedRemove.
+  rename H7 into HfrontierInsert.
+  rename H8 into Heqk.
+
+  rewrite e in *.
+  assert (exists v'' p_out'', p_out' = p_out'' ++ [v'']).
+  eapply dest_different_end_nonempty; eauto.
+  elim H; clear H; intros v'' H; elim H; clear H; intros p_out'' H.
+  rewrite H in Hp_split'.
+  rewrite (last_subst_into _ _ _ Hp_split') in Hp_split.
+  (* Hp_split' in this form means edge between u and v'' *)
+  remember (in_path_edge _ _ _ _ _ _ Hp_split _ _ _ Hp') as Hedge.
+  (* edge from u to v'' means In v'' neighbors *)
+  remember (edge_in_neigh _ _ _ Heqk _ Hedge) as Hneigh.
+  (* v'' is in p_out' *)
+  assert (In v'' p_out'). eapply last_means_in. eauto.
+  (* v'' is in keys frontier' *)
+  remember (in_neigh_in_frontier' _ _ _ _ _ _ Hneigh HfrontierInsert)
+    as Hkeys.
+  (* contradiction from Hws' *)
+  remember (Hws' _ H0 Hkeys) as Hcontra. auto.
+Qed.
+            assert False. eapply HextendFrontier_not_u; eauto.
+            inversion H0.
+ 
+          + eapply (remove_preserves _ _ _ HunepandedRemove).
             auto. destruct (node_eq_dec v' v). rewrite e; auto.
             apply HwUnexpanded.
             assert (In v' (p_out'++v'::p_skip)) by crush.
@@ -980,7 +1048,7 @@ Lemma bfs_corr:
             destruct (in_front _ _ _ H0) as [H1 | H1]; crush.
         - intros.
           destruct (node_eq_dec w u).
-          * (* pretty much the same as in the previous part
+          + (* pretty much the same as in the previous part
                but replace all equations about partitioning p
                and partition with w instead *)
             assert (In w p_out). eapply not_last_in_front. apply Hp_split'. auto.
@@ -993,32 +1061,20 @@ Lemma bfs_corr:
             rewrite Hout_split in Hp_split'. exists (p_win' ++ v'::p_skip).
             crush. elim H0; clear H0; intros p_wskip Hp_wsplit'.
 
-            rewrite e in *.
-            assert (exists v'' p_out'', p_wout = p_out'' ++ [v'']).
-            eapply dest_different_end_nonempty; eauto.
-            elim H0; clear H0; intros v'' H0; elim H0; clear H0; intros p_out'' H0.
-            rewrite H0 in Hp_wsplit'.
-            rewrite (last_subst_into _ _ _ Hp_wsplit') in Hp_split.
-            (* Hp_split' in this form means edge between u and v'' *)
-            remember (in_path_edge _ _ _ _ _ _ Hp_split _ _ _ Hp') as Hedge.
-            (* edge from u to v'' means In v'' neighbors *)
-            remember (edge_in_neigh _ _ _ Heqk _ Hedge) as Hneigh.
-            (* v'' is in p_out' *)
-            assert (In v'' p_wout). eapply last_means_in. eauto.
-            (* additional step: everything in p_wout is in p_out' *)
-            assert (In v'' p_out'). crush.
-            (* contradiction from Hws' *)
-            remember (Hws' _ H2 Hneigh) as Hcontra. inversion Hcontra.
-          * intros.
-            assert (In w unexpanded -> In w unexpanded').
-              intro. eapply remove_preserves; eauto.
-            apply H1. apply HwUnexpanded. eapply not_last_in_front; eauto.
+            assert (forall w : node, In w p_wout -> ~ In w (keys frontier')).
+            intros. apply Hws'. crush.
 
-        - rewrite <- HfrontierInsert. exists (foundPathLen (u, pu)).
-          
+            assert False. eapply (HextendFrontier_not_u w); eauto.
+            inversion H1.
+          + intros.
+            assert (In w unexpanded -> In w unexpanded') by (
+              intros; eapply remove_preserves; eauto).
+            apply H1. apply HwUnexpanded. eapply not_last_in_front; eauto.
+        - rewrite <- HfrontierInsert. exists (S (foundPathLen (u, pu))).
           (* insert along with other things, and guess what, it is in there *)
           eapply insert_many_in. auto.
-          left. apply in_with_map. auto.
+          admit. (* FIXME: update the proof of preservation of the first
+          invariant to reflect the change from speaking about a node to an edge*)
       }
 
       assert (forall w, In w p_out -> u<>w).
@@ -1048,7 +1104,7 @@ Lemma bfs_corr:
       - eauto using remove_preserves.
       - intros w Hw. specialize (HwUnexpanded w Hw). eapply remove_preserves; eauto.
       - exists vp.
-        assert (In (v, vp) frontierRemaining)
+        assert (In (v, (hd_error p_in, vp)) frontierRemaining)
           (* discarded ++ (u, pu) :: frontierRemaining
              v<>u
              forall v, In v discarded -> ~ In v unexpanded
@@ -1205,9 +1261,8 @@ Lemma bfs_corr:
         elim He; clear He; intros p_out He.
         destruct He as [Hsplit_p [HvUnexpanded [Hp_out HvFrontier]]].
         rewrite Hsplit_p in *; clear Hsplit_p.
-        elim HvFrontier; clear HvFrontier; intros vp HvFrontier.
+        elim HvFrontier; clear HvFrontier; intros lv HvFrontier.
         generalize HvFrontier; intro HIn.
-        destruct vp as [vpp lv].
         generalize (HfrontierParents _ _ _ HvFrontier); intro Hv_parent.
         (* todo: separate this out? HdiscardExpanded + Hfrontier_split *)
         rewrite Hfrontier_split in HIn; rename HIn into HIn'.
@@ -1218,13 +1273,14 @@ Lemma bfs_corr:
         assert (lv >= lu) as Hge. {
           simpl in HIn. destruct HIn as [HIn | HIn].
             inversion HIn. omega.
-            assert (foundPathLen (v,(vpp,lv)) >= foundPathLen (u, (Some u_parent, lu)))
+            assert (foundPathLen (v,(hd_error p_in, lv)) >= foundPathLen (u, (Some u_parent, lu)))
               as Hge' by (apply HextractMin; simpl in *; auto).
             unfold foundPathLen in Hge'. simpl in Hge'. auto.
         }
         simpl; rewrite Hupp_length; clear Hupp_length.
         assert (length (p_out++v::p_in) >= lv); [|omega]; clear Hge.
-        destruct vpp as [v_parent|]; [|splitHs; omega].
+        remember (hd_error p_in) as hd_p_in.
+        destruct hd_p_in as [v_parent|]; [|splitHs; omega].
         elim Hv_parent; clear Hv_parent; intros v_parent_path Hv_parent_path.
         destruct Hv_parent_path as [Hv_parent_Some [Hv_parent_reachable Hvpp_length]].
         destruct (HparentPaths _ _ Hv_parent_Some) as [_ Hv_parent_shortest].
@@ -1234,7 +1290,16 @@ Lemma bfs_corr:
         assert (length p_in >= length v_parent_path);
           [|subst;rewrite app_length; rewrite plus_comm; simpl;
             rewrite plus_comm; apply HgeS; apply HgePlus; auto].
-        admit. (* FIXME: this does not seem to work *)
+        eapply Hv_parent_shortest.
+        destruct p_in as [|v_parent_]; [inversion Heqhd_p_in|].
+        symmetry in Heqhd_p_in; myinj' Heqhd_p_in.
+        assert (forall x xs y ys, reachableUsing g s x (xs ++ y :: ys)
+                               -> reachableUsing g s y (      y :: ys))
+          as HsubPath
+          by admit.
+        replace ( p_out ++  v  :: v_parent :: p_in)
+           with ((p_out ++ [v]) ++ v_parent :: p_in) in * by crush.
+        eauto.
       } {
         destruct HuReachable.
         injection Hvp; intro; subst; split.
