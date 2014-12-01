@@ -1410,3 +1410,28 @@ Lemma bfs_corr':
     - crush.
   }
 Qed.
+
+
+Section ex1. (* BFS example from CLRS 3rd edition *)
+  Notation r := (Node 0).
+  Notation s := (Node 1).
+  Notation t := (Node 2).
+  Notation u := (Node 3).
+  Notation v := (Node 4).
+  Notation w := (Node 5).
+  Notation x := (Node 6).
+  Notation y := (Node 7).
+  Definition g :=
+  [ (v, [r])
+  ; (r, [v; s])
+  ; (s, [r; w])
+  ; (w, [s; t; x])
+  ; (t, [u; x; w])
+  ; (u, [t; x; y])
+  ; (x, [w; t; u; y])
+  ; (y, [x; u])
+  ].
+
+  Example bfs_ex1 : traceParent (bfs' g s) v = Some [v;r;s]. reflexivity. Qed.
+  Eval compute in (bfs' g s).
+End ex1.
