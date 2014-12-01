@@ -1014,7 +1014,8 @@ Lemma bfs_corr:
               intro. eapply remove_preserves; eauto.
             apply H1. apply HwUnexpanded. eapply not_last_in_front; eauto.
 
-        - rewrite <- HfrontierInsert. exists (Some u, S (foundPathLen (u, pu))).
+        - rewrite <- HfrontierInsert. exists (foundPathLen (u, pu)).
+          
           (* insert along with other things, and guess what, it is in there *)
           eapply insert_many_in. auto.
           left. apply in_with_map. auto.
