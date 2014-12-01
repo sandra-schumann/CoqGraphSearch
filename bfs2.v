@@ -953,7 +953,7 @@ Lemma bfs_corr:
           rewrite Hp_split. rewrite <- app_assoc. apply f_equal. reflexivity.
         - destruct (node_eq_dec v' u).
           (* u cannot be last (u <> d). if us was in v', the thing after u would be v' *)
-          * rewrite e in *.
+          + rewrite e in *.
             assert (exists v'' p_out'', p_out' = p_out'' ++ [v'']).
             eapply dest_different_end_nonempty; eauto.
             elim H0; clear H0; intros v'' H0; elim H0; clear H0; intros p_out'' H0.
@@ -967,7 +967,7 @@ Lemma bfs_corr:
             assert (In v'' p_out'). eapply last_means_in. eauto.
             (* contradiction from Hws' *)
             remember (Hws' _ H1 Hneigh) as Hcontra. inversion Hcontra. 
-          * eapply (remove_preserves _ _ _ HunepandedRemove).
+          + eapply (remove_preserves _ _ _ HunepandedRemove).
             auto. destruct (node_eq_dec v' v). rewrite e; auto.
             apply HwUnexpanded.
             assert (In v' (p_out'++v'::p_skip)) by crush.
@@ -980,7 +980,7 @@ Lemma bfs_corr:
             destruct (in_front _ _ _ H0) as [H1 | H1]; crush.
         - intros.
           destruct (node_eq_dec w u).
-          * (* pretty much the same as in the previous part
+          + (* pretty much the same as in the previous part
                but replace all equations about partitioning p
                and partition with w instead *)
             assert (In w p_out). eapply not_last_in_front. apply Hp_split'. auto.
@@ -1009,15 +1009,16 @@ Lemma bfs_corr:
             assert (In v'' p_out'). crush.
             (* contradiction from Hws' *)
             remember (Hws' _ H2 Hneigh) as Hcontra. inversion Hcontra.
-          * intros.
-            assert (In w unexpanded -> In w unexpanded').
-              intro. eapply remove_preserves; eauto.
+          + intros.
+            assert (In w unexpanded -> In w unexpanded') by (
+              intros; eapply remove_preserves; eauto).
             apply H1. apply HwUnexpanded. eapply not_last_in_front; eauto.
 
-        - rewrite <- HfrontierInsert. exists (Some u, S (foundPathLen (u, pu))).
+        - rewrite <- HfrontierInsert. exists (S (foundPathLen (u, pu))).
           (* insert along with other things, and guess what, it is in there *)
           eapply insert_many_in. auto.
-          left. apply in_with_map. auto.
+          admit. (* FIXME: update the proof of preservation of the first
+          invariant to reflect the change from speaking about a node to an edge*)
       }
 
       assert (forall w, In w p_out -> u<>w) (* if u was in p_out then the next thing would be in neihgbours *)
@@ -1029,7 +1030,7 @@ Lemma bfs_corr:
       - eauto using remove_preserves.
       - intros w Hw. specialize (HwUnexpanded w Hw). eapply remove_preserves; eauto.
       - exists vp.
-        assert (In (v, vp) frontierRemaining)
+        assert (In (v, (hd_error p_in, vp)) frontierRemaining)
           (* discarded ++ (u, pu) :: frontierRemaining
              v<>u
              forall v, In v discarded -> ~ In v unexpanded
@@ -1186,9 +1187,8 @@ Lemma bfs_corr:
         elim He; clear He; intros p_out He.
         destruct He as [Hsplit_p [HvUnexpanded [Hp_out HvFrontier]]].
         rewrite Hsplit_p in *; clear Hsplit_p.
-        elim HvFrontier; clear HvFrontier; intros vp HvFrontier.
+        elim HvFrontier; clear HvFrontier; intros lv HvFrontier.
         generalize HvFrontier; intro HIn.
-        destruct vp as [vpp lv].
         generalize (HfrontierParents _ _ _ HvFrontier); intro Hv_parent.
         (* todo: separate this out? HdiscardExpanded + Hfrontier_split *)
         rewrite Hfrontier_split in HIn; rename HIn into HIn'.
@@ -1199,13 +1199,14 @@ Lemma bfs_corr:
         assert (lv >= lu) as Hge. {
           simpl in HIn. destruct HIn as [HIn | HIn].
             inversion HIn. omega.
-            assert (foundPathLen (v,(vpp,lv)) >= foundPathLen (u, (Some u_parent, lu)))
+            assert (foundPathLen (v,(hd_error p_in, lv)) >= foundPathLen (u, (Some u_parent, lu)))
               as Hge' by (apply HextractMin; simpl in *; auto).
             unfold foundPathLen in Hge'. simpl in Hge'. auto.
         }
         simpl; rewrite Hupp_length; clear Hupp_length.
         assert (length (p_out++v::p_in) >= lv); [|omega]; clear Hge.
-        destruct vpp as [v_parent|]; [|splitHs; omega].
+        remember (hd_error p_in) as hd_p_in.
+        destruct hd_p_in as [v_parent|]; [|splitHs; omega].
         elim Hv_parent; clear Hv_parent; intros v_parent_path Hv_parent_path.
         destruct Hv_parent_path as [Hv_parent_Some [Hv_parent_reachable Hvpp_length]].
         destruct (HparentPaths _ _ Hv_parent_Some) as [_ Hv_parent_shortest].
@@ -1215,7 +1216,16 @@ Lemma bfs_corr:
         assert (length p_in >= length v_parent_path);
           [|subst;rewrite app_length; rewrite plus_comm; simpl;
             rewrite plus_comm; apply HgeS; apply HgePlus; auto].
-        admit. (* FIXME: this does not seem to work *)
+        eapply Hv_parent_shortest.
+        destruct p_in as [|v_parent_]; [inversion Heqhd_p_in|].
+        symmetry in Heqhd_p_in; myinj' Heqhd_p_in.
+        assert (forall x xs y ys, reachableUsing g s x (xs ++ y :: ys)
+                               -> reachableUsing g s y (      y :: ys))
+          as HsubPath
+          by admit.
+        replace ( p_out ++  v  :: v_parent :: p_in)
+           with ((p_out ++ [v]) ++ v_parent :: p_in) in * by crush.
+        eauto.
       } {
         destruct HuReachable.
         injection Hvp; intro; subst; split.
