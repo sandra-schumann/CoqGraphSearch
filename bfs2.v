@@ -606,7 +606,7 @@ Fixpoint traceParent
       if node_eq_dec v v'
       then let (parentPointer, l) := value in
            match parentPointer with
-           | None => Some nil
+           | None => Some [v]
            | Some u => match traceParent parent' u with
                        | None => None
                        | Some path => Some (v::path)
@@ -665,9 +665,9 @@ Proof.
 Qed.
 
 Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
-| IdPath : forall g s, reachableUsing g s s []
-| ConsPath : forall g s d p,               reachableUsing g s d    p   ->
-             forall d', hasEdge g d d' ->  reachableUsing g s d' (d'::p).
+| IdPath : forall g s, reachableUsing g s s [s]
+| ConsPath : forall g s u p,             reachableUsing g s u    p   ->
+             forall v, hasEdge g u v ->  reachableUsing g s v  (v::p).
 
 Lemma removing_corr_item : forall x xs xs',
   remove node_eq_dec x xs = xs' ->
@@ -731,7 +731,7 @@ Lemma reachableUsing_head: forall g s d p, reachableUsing g s d p ->
 Proof.
   induction p; intros; simpl in *.
   - crush.
-  - exists p. assert (a = d). inversion H. crush. crush.
+  - exists p. assert (a = d). inversion H. crush. crush. crush.
 Qed.
 
 Lemma contains_sth_is_not_empty : forall {A} xs (x:A) ys, xs++(x::ys) <> [].
@@ -786,14 +786,16 @@ Lemma in_path_edge :
   forall p' p a b p'' p''', p = ((p' ++ [a]) ++ b :: p'') ++ p''' ->
   forall g s d, reachableUsing g s d p ->
   hasEdge g b a.
-Proof.
+Admitted.
+(*
   induction p'; intros.
-  simpl in H. inversion H0; subst. crush.
-  subst. inversion H6. subst. inversion H1; subst. auto.
-  inversion H0; subst. inversion H4.
-  inversion H6.
+  simpl in H. inversion H0. crush.
+  subst. inversion H6. subst. inversion H1; subst. auto. 
+  inversion H0; subst. inversion H3.
+  inversion H4.
   apply (IHp' p0 a0 b p'' p''' H4 g s d0 H1).
 Qed.
+*)
 
 Lemma edge_in_neigh : forall g a neigh,
   lookup g a = Some neigh -> forall b, hasEdge g a b -> In b neigh.
@@ -860,6 +862,56 @@ Proof.
   left; apply in_neigh_in_map; auto.
 Qed.
 
+Lemma HextendFrontier_not_u :
+  forall v' u g neighbors pu frontierRemaining frontier'
+  unexpanded unexpanded' d p' s p_out v p_in p_out' p_skip,
+  v' = u ->
+  (forall w : node, In w p_out' -> ~ In w (keys frontier')) ->
+  p_out ++ [v] = p_out' ++ v' :: p_skip ->
+  (forall w : node, In w p_out -> In w unexpanded) ->
+  p' = p_out ++ v :: p_in ->
+  u <> d -> 
+  reachableUsing g s d p' ->
+  remove node_eq_dec u unexpanded = unexpanded' ->
+  fold_right (insert foundPathLen) frontierRemaining
+    (map
+      (fun v : node =>
+        (v, (Some u, S (foundPathLen (u, pu))))) neighbors) =
+    frontier' ->
+  lookup g u = Some neighbors ->
+  False.
+Proof.
+  intros.
+  rename H into e.
+  rename H0 into Hws'.
+  rename H1 into Hp_split'.
+  rename H2 into HwUnexpanded.
+  rename H3 into Hp_split.
+  rename H4 into n1.
+  rename H5 into Hp'.
+  rename H6 into HunepandedRemove.
+  rename H7 into HfrontierInsert.
+  rename H8 into Heqk.
+
+  rewrite e in *.
+  assert (exists v'' p_out'', p_out' = p_out'' ++ [v'']).
+  eapply dest_different_end_nonempty; eauto.
+  elim H; clear H; intros v'' H; elim H; clear H; intros p_out'' H.
+  rewrite H in Hp_split'.
+  rewrite (last_subst_into _ _ _ Hp_split') in Hp_split.
+  (* Hp_split' in this form means edge between u and v'' *)
+  remember (in_path_edge _ _ _ _ _ _ Hp_split _ _ _ Hp') as Hedge.
+  (* edge from u to v'' means In v'' neighbors *)
+  remember (edge_in_neigh _ _ _ Heqk _ Hedge) as Hneigh.
+  (* v'' is in p_out' *)
+  assert (In v'' p_out'). eapply last_means_in. eauto.
+  (* v'' is in keys frontier' *)
+  remember (in_neigh_in_frontier' _ _ _ _ _ _ Hneigh HfrontierInsert)
+    as Hkeys.
+  (* contradiction from Hws' *)
+  remember (Hws' _ H0 Hkeys) as Hcontra. auto.
+Qed.
+
 Lemma bfs_corr:
   forall (g:graph) (s:node),
   forall (unexpanded:list node) (frontier:list found) (parent:list found),
@@ -874,7 +926,7 @@ Lemma bfs_corr:
   ) /\ (
     forall v parentPointer l, In (v, (parentPointer, l)) frontier ->
       match parentPointer with
-      | None => v = s /\ l = 0
+      | None => v = s /\ l = 1
       | Some u => exists p,
           traceParent parent u = Some p /\ reachableUsing g s v (v::p) /\ length (v::p) = l
                                         (*todo: replace with hasEdge ? *)
@@ -949,7 +1001,7 @@ Lemma bfs_corr:
       elim Hfrontier_v; clear Hfrontier_v; intros vp Hfrontier_v.
       destruct pu as [[u_parent|] lu];
         elim (HfrontierParents _ _ _ Hfrontier_u); intros pu Hu_parent;
-        [|splitHs; subst; exists []; simpl; destruct (node_eq_dec s s); [auto|congruence]].
+        [|splitHs; subst; exists [s]; simpl; destruct (node_eq_dec s s); [auto|congruence]].
       splitHs; repeat split; auto.
       subst. simpl. destruct (node_eq_dec u u); [|crush].
       destruct (traceParent parent u_parent); [|congruence].
@@ -981,58 +1033,7 @@ Lemma bfs_corr:
           rewrite Hp_split. rewrite <- app_assoc. apply f_equal. reflexivity.
         - destruct (node_eq_dec v' u).
           (* u cannot be last (u <> d). if us was in v', the thing after u would be v' *)
-          +
-
-Lemma HextendFrontier_not_u :
-  forall v' u g neighbors pu frontierRemaining frontier'
-  unexpanded unexpanded' d p' s p_out v p_in p_out' p_skip,
-  v' = u ->
-  (forall w : node, In w p_out' -> ~ In w (keys frontier')) ->
-  p_out ++ [v] = p_out' ++ v' :: p_skip ->
-  (forall w : node, In w p_out -> In w unexpanded) ->
-  p' = p_out ++ v :: p_in ->
-  u <> d -> 
-  reachableUsing g s d p' ->
-  remove node_eq_dec u unexpanded = unexpanded' ->
-  fold_right (insert foundPathLen) frontierRemaining
-    (map
-      (fun v : node =>
-        (v, (Some u, S (foundPathLen (u, pu))))) neighbors) =
-    frontier' ->
-  lookup g u = Some neighbors ->
-  False.
-Proof.
-  intros.
-  rename H into e.
-  rename H0 into Hws'.
-  rename H1 into Hp_split'.
-  rename H2 into HwUnexpanded.
-  rename H3 into Hp_split.
-  rename H4 into n1.
-  rename H5 into Hp'.
-  rename H6 into HunepandedRemove.
-  rename H7 into HfrontierInsert.
-  rename H8 into Heqk.
-
-  rewrite e in *.
-  assert (exists v'' p_out'', p_out' = p_out'' ++ [v'']).
-  eapply dest_different_end_nonempty; eauto.
-  elim H; clear H; intros v'' H; elim H; clear H; intros p_out'' H.
-  rewrite H in Hp_split'.
-  rewrite (last_subst_into _ _ _ Hp_split') in Hp_split.
-  (* Hp_split' in this form means edge between u and v'' *)
-  remember (in_path_edge _ _ _ _ _ _ Hp_split _ _ _ Hp') as Hedge.
-  (* edge from u to v'' means In v'' neighbors *)
-  remember (edge_in_neigh _ _ _ Heqk _ Hedge) as Hneigh.
-  (* v'' is in p_out' *)
-  assert (In v'' p_out'). eapply last_means_in. eauto.
-  (* v'' is in keys frontier' *)
-  remember (in_neigh_in_frontier' _ _ _ _ _ _ Hneigh HfrontierInsert)
-    as Hkeys.
-  (* contradiction from Hws' *)
-  remember (Hws' _ H0 Hkeys) as Hcontra. auto.
-Qed.
-            assert False. eapply HextendFrontier_not_u; eauto.
+          + assert False. eapply HextendFrontier_not_u; eauto.
             inversion H0.
  
           + eapply (remove_preserves _ _ _ HunepandedRemove).
@@ -1171,7 +1172,7 @@ Qed.
         unfold foundPathLen in *; auto.
     } {
       elim HuReachable; intros; splitHs; subst.
-      exists []; repeat split; simpl; eauto.
+      exists [s]; repeat split; simpl; eauto.
       - destruct (node_eq_dec s s); pv.
       - econstructor. instantiate (1:=s). constructor. admit. (* TODO: HneighborEdges *)
     }
@@ -1229,7 +1230,7 @@ Qed.
       destruct Hu_parent_path as [Hu_parent_lookup]; rewrite Hu_parent_lookup.
       splitHs; split; auto.
     } {
-      exists [].
+      exists [u].
       splitHs; subst; split; auto; constructor.
     }
   }
@@ -1280,7 +1281,7 @@ Qed.
         simpl; rewrite Hupp_length; clear Hupp_length.
         assert (length (p_out++v::p_in) >= lv); [|omega]; clear Hge.
         remember (hd_error p_in) as hd_p_in.
-        destruct hd_p_in as [v_parent|]; [|splitHs; omega].
+        destruct hd_p_in as [v_parent|]; [|induction p_out; crush].
         elim Hv_parent; clear Hv_parent; intros v_parent_path Hv_parent_path.
         destruct Hv_parent_path as [Hv_parent_Some [Hv_parent_reachable Hvpp_length]].
         destruct (HparentPaths _ _ Hv_parent_Some) as [_ Hv_parent_shortest].
@@ -1304,7 +1305,7 @@ Qed.
         destruct HuReachable.
         injection Hvp; intro; subst; split.
         - constructor.
-        - intros. simpl. destruct (length p'); crush.
+        - intros. simpl. inversion H0; crush.
       }
     }
     remember (traceParent parent v) as tracePv; destruct tracePv; [|inversion Hvp].
@@ -1347,4 +1348,65 @@ Qed.
     exact (HparentPaths d p' Hp').
   }
 
+Qed.
+
+Fixpoint nodes (g:graph) : list node :=
+  match g with
+  | nil => nil
+  | adj::g' =>  fst adj :: snd adj ++ nodes g'
+  end.
+
+Lemma hasEdge_in_nodes:
+  forall g u v, hasEdge g u v -> In u (nodes g) /\ In v (nodes g).
+Proof.
+  unfold hasEdge; unfold lookupDefault.
+  intros g u v H.
+  remember (lookup g u) as lookupRes; destruct lookupRes; [|pv].
+  specialize (lookup_in g u l (eq_sym HeqlookupRes)); intro H1.
+  clear HeqlookupRes.
+  split; generalize dependent l; induction g; [auto| |auto| ];
+    (simpl; intros; destruct H1; [crush|right]; apply in_or_app; right; eauto).
+Qed.
+
+Lemma reachableUsing_in_nodes:
+  forall g u v p, reachableUsing g u v p -> In u (nodes g) -> In v (nodes g).
+Proof.
+  induction 1; crush. specialize (hasEdge_in_nodes g u v); crush.
+Qed.
+
+Lemma reachableUsing_in_nodes':
+  forall g u v p, reachableUsing g u v p -> u <> v -> In v (nodes g).
+Proof.
+  induction 1; crush. specialize (hasEdge_in_nodes g u v); crush.
+Qed.
+
+Definition bfs' g s := bfs g (s::nodes g) [(s,(None,1))] [].
+
+Lemma bfs_corr':
+  forall (g:graph) (s:node) ret, bfs' g s = ret ->
+  ((
+    forall (d:node) (p':list node), reachableUsing g s d p' -> exists p, traceParent ret d = Some p
+  ) /\ (
+    forall (d:node) (p:list node), traceParent ret d = Some p -> shortestPath g s d p
+  )).
+  unfold bfs'.
+  intros.
+  eapply bfs_corr; [|apply H]; clear H; repeat split; intros; try solve [pv].
+  { destruct (node_in_dec d (s::nodes g)).
+    - exists []. exists s. exists (tail p'). repeat split.
+      + admit.
+      + left; reflexivity.
+      + admit.
+      + exists 1. left; reflexivity.
+    - assert False; [|pv]; apply n.
+      destruct (node_eq_dec s d).
+      + left; trivial.
+      +  right. eapply reachableUsing_in_nodes'; eauto.
+  }
+  {
+    destruct H; [|pv].
+    destruct parentPointer.
+    - assert False; [|pv]. assert (Some n = None) by crush; crush.
+    - crush.
+  }
 Qed.
