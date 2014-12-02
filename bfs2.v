@@ -1204,7 +1204,7 @@ Lemma bfs_corr:
     induction neighbors; [pv|].
     simpl in Hnew; destruct Hnew as [HNow|Hbefore].
     Focus 2.
-      eapply IHneighbors; clear IHneighbors; eauto;
+      eapply IHneighbors. clear IHneighbors; eauto.
     fail "end Focus 2".
     clear IHneighbors.
     injection HNow; clear HNow; intros.
