@@ -545,17 +545,14 @@ Definition bfs_step
   := match closestUnexpanded foundPathLen unexpanded frontier with
   | None => None
   | Some p => let (found_u, frontierRemaining) := p in
-          let u := fst found_u in
-          let l := foundPathLen found_u in
-          let parent' := found_u::parent in
-          let unexpanded' := remove node_eq_dec u unexpanded in
-          match lookup g u with
-          | None => None (* invalid graph *)
-          | Some neighbors =>
-              let frontierNew := map (fun v => (v, (Some u, 1+l))) neighbors in
-              let frontier' := fold_right (insert foundPathLen) frontierRemaining frontierNew in
-              Some (unexpanded', frontier', parent')
-          end
+      let u := fst found_u in
+      let l := foundPathLen found_u in
+      let parent' := found_u::parent in
+      let unexpanded' := remove node_eq_dec u unexpanded in
+      let neighbors := lookupDefault g [] u in
+      let frontierNew := map (fun v => (v, (Some u, 1+l))) neighbors in
+      let frontier' := fold_right (insert foundPathLen) frontierRemaining frontierNew in
+          Some (unexpanded', frontier', parent')
   end.
 
 Ltac splitHs := repeat (match goal with [ H : _ /\ _ |- _ ] => destruct H end).
@@ -569,15 +566,10 @@ Ltac expandBFS :=
               =>let fu := fresh "found_u" in let fr := fresh "frontierRemaining" in
                   destruct x as [fu fr]; simpl in H
             end
-          ; match goal with [H : context[lookup g (fst ?found_u)] |- _ ]
-              =>remember (lookup g (fst found_u)) as k
+          ; match goal with [H : context[lookupDefault g [] (fst ?found_u)] |- _ ]
+              =>remember (lookupDefault g [] (fst found_u)) as neighbors
               ; let uu := fresh "u" in let pu := fresh "pu" in
                   destruct found_u as [uu pu]
-              ; destruct k; [|inversion H]
-            end
-          ; match goal with [H : Some ?ns = lookup _ _ |- _ ]
-              =>simpl in H; symmetry in H
-              ; let neighs := fresh "neighbors" in rename ns into neighs
             end
           ; match goal with [H : Some _ = closestUnexpanded _ _ _ |- _ ]
               =>simpl in H; symmetry in H
@@ -771,7 +763,7 @@ Proof.
 Qed.
 
 Lemma lookup_neighbors: 
-  forall g u neighbors, lookup g u = Some neighbors ->
+  forall g u neighbors, lookupDefault g [] u = neighbors ->
   forall v, In v neighbors -> hasEdge g u v.
 Proof.
   intros. unfold hasEdge in *. unfold lookupDefault in *.
@@ -882,7 +874,7 @@ Proof.
 Qed.
 
 Lemma edge_in_neigh : forall g a neigh,
-  lookup g a = Some neigh -> forall b, hasEdge g a b -> In b neigh.
+  lookupDefault g [] a = neigh -> forall b, hasEdge g a b -> In b neigh.
 Proof.
   intros. unfold hasEdge in *. unfold lookupDefault in *.
   rewrite H in *. auto.
@@ -954,7 +946,7 @@ Lemma HextendFrontier_not_u :
       (fun v : node =>
         (v, (Some u, S (foundPathLen (u, pu))))) neighbors) =
     frontier' ->
-  lookup g u = Some neighbors ->
+  lookupDefault g [] u = neighbors ->
   False.
 Proof.
   intros.
@@ -1100,8 +1092,9 @@ Lemma bfs_corr:
 
       assert (forall w, In w (p_out ++ [v]) -> In w unexpanded) as HwvUnexpanded by
         (subst; intros; destruct (in_app_or _ _ _ H0); eauto; inversion H1; crush).
-      eelim (HextendFrontier _ _ _ _ _ HwvUnexpanded); eauto.
-      instantiate (1:=u).
+      assert (Some u <> hd_error (p_out ++ [v])) as HhdOut
+        by admit.
+      eelim (HextendFrontier _ v u HhdOut unexpanded HwvUnexpanded).
       {
         intros Hv'.
         elim Hv'; clear Hv'; intros p_skip Hv'.
@@ -1122,7 +1115,7 @@ Lemma bfs_corr:
           replace (p_out ++ v :: p_in) with (p_out ++ [v] ++ p_in) in * by crush.
           rewrite app_assoc in Hp'. rewrite Hp_split' in Hp'.
           assert (hasEdge g u v') as Hhas_u_v by admit.
-          generalize (edge_in_neigh _ _ _ Heqk _ Hhas_u_v); intro HuvInNeigh.
+          generalize (edge_in_neigh _ _ _ (eq_sym Heqneighbors) _ Hhas_u_v); intro HuvInNeigh.
           exact (in_neigh_in_map _ _ _ HuvInNeigh).
       }
 
@@ -1167,7 +1160,7 @@ Lemma bfs_corr:
       rewrite Hfrontier_split; apply in_or_app; right; left; crush.
     destruct pu as [upptr ul].
     generalize (HfrontierParents _ _ _ HuInFrontier) as HuReachable; intro.
-    generalize (lookup_neighbors _ _ _ Heqk) as HneighborEdges; intro.
+    generalize (lookup_neighbors _ _ _ (eq_sym Heqneighbors)) as HneighborEdges; intro.
     (* TODO: move this into the following induction in place of an admit *)
 
     revert HuReachable Hnew HparentPrepend; clear;
@@ -1246,7 +1239,7 @@ Lemma bfs_corr:
       rewrite Hfrontier_split; apply in_or_app; right; left; crush.
     destruct pu as [upptr ul].
     generalize (HfrontierParents _ _ _ HuInFrontier) as HuReachable; intro.
-    generalize (lookup_neighbors _ _ _ Heqk) as HneighborEdges; intro.
+    generalize (lookup_neighbors _ _ _ (eq_sym Heqneighbors)) as HneighborEdges; intro.
     destruct (node_eq_dec u u); [|pv].
     destruct upptr as [u_parent|]. {
       elim HuReachable; clear HuReachable; intros u_parent_path Hu_parent_path.
@@ -1269,7 +1262,7 @@ Lemma bfs_corr:
         rewrite Hfrontier_split; apply in_or_app; right; left; crush.
       destruct pu as [upptr lu].
       generalize (HfrontierParents _ _ _ HuInFrontier) as HuReachable; intro.
-      generalize (lookup_neighbors _ _ _ Heqk) as HneighborEdges; intro.
+      generalize (lookup_neighbors _ _ _ (eq_sym Heqneighbors)) as HneighborEdges; intro.
       rewrite e in *; clear e v.
       destruct upptr as [u_parent|]. {
         elim HuReachable; clear HuReachable; intros u_parent_path Hu_parent_path.
