@@ -867,7 +867,7 @@ Proof.
       inversion H6; subst. inversion H0; subst.
       inversion H6; subst. auto.
   - destruct p; inversion H. inversion H0; subst.
-    + remember (contains_sth_is_not_empty (p'++[a0]) b (p''++p''')) as H1.
+    + remember (contains_sth_is_not_empty (p' ++ [a0]) b (p''++p''')) as H1.
       rewrite <- app_assoc in H8. rewrite <- app_comm_cons in H8.
       clear HeqH1. rewrite <- H8 in H1. crush.
     + eapply IHp'. Focus 2. apply H8. crush.
@@ -978,6 +978,12 @@ Proof.
     as Hkeys.
   (* contradiction from Hws' *)
   remember (Hws' _ H0 Hkeys) as Hcontra. auto.
+Qed.
+
+Lemma list_last_next_first : forall {A} a (x:A) b, (a ++ [x]) ++ b = a ++ x::b.
+Proof.
+  induction a; intros; simpl in *; auto.
+  rewrite IHa. auto.
 Qed.
 
 Lemma bfs_corr:
@@ -1114,7 +1120,10 @@ Lemma bfs_corr:
           rewrite Hp_split in Hp'.
           replace (p_out ++ v :: p_in) with (p_out ++ [v] ++ p_in) in * by crush.
           rewrite app_assoc in Hp'. rewrite Hp_split' in Hp'.
-          assert (hasEdge g u v') as Hhas_u_v by admit.
+          assert (hasEdge g u v') as Hhas_u_v by
+            (remember ((p_out' ++ v' :: u :: p_skip) ++ p_in) as g';
+             rewrite <- (list_last_next_first) in Heqg';
+             apply (in_path_edge _ _ _ _ _ _ Heqg' _ _ _ Hp')).
           generalize (edge_in_neigh _ _ _ (eq_sym Heqneighbors) _ Hhas_u_v); intro HuvInNeigh.
           exact (in_neigh_in_map _ _ _ HuvInNeigh).
       }
