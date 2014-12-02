@@ -34,6 +34,12 @@ Definition graph := list adj.
 Definition found := (node * (option node*nat))%type.
 Definition foundPathLen (p:found) : nat := snd (snd p).
 
+Definition found_eq_dec : forall(x y:found), {x = y} + {x <> y}.
+  repeat (decide equality).
+Qed.
+
+Definition found_in_dec := in_dec found_eq_dec.
+
 (** keys g gives all the first parts of adjs in a graph g (list of nodes) **)
 Definition keys {A:Type} := map (@fst node A).
 
@@ -637,31 +643,52 @@ Proof.
   subst. crush. crush. crush.
 Qed.
 
-Lemma HextendFrontier : forall {A} ws (v:node) frontier,
-  (exists pre v' post, ws++[v]=post++v'::pre /\ In v' (@keys A frontier)
-  /\ (forall w, In w post -> ~In w (keys frontier)))
-  \/
-  (~In v (keys frontier) /\ forall w, In w ws -> ~In w (keys frontier)).
+Lemma in_partitioning : forall {A} xs (x:A), In x xs ->
+  exists xs1 xs2, xs = xs1++x::xs2.
 Proof.
-  intros. induction ws; simpl in *.
+  induction xs; intros. inversion H.
+  inversion H. exists []. exists xs. crush.
+  elim (IHxs _ H0); intros. elim H1; intros. exists (a::x0). exists x1. crush.
+Qed.
+
+Lemma contains_sth_is_not_empty : forall {A} xs (x:A) ys, xs++(x::ys) <> [].
+Proof. induction xs; crush. Qed.
+
+Lemma HextendFrontier : forall ws (v:node) (frontier:list found) in_head,
+  (exists pre v' pv' post, ws++[v]=post++v'::pv'::pre
+    /\ exists l, In (v',(Some pv',l)) frontier
+    /\ (forall w pw fh ft, post++[v'] = fh++w::pw::ft -> forall (l:nat), ~In (w,(Some pw,l)) frontier))
+  \/
+  (exists post, ws=post /\ In (v,in_head) frontier
+    /\ forall w pw fh ft, ws++[v] = fh++(w::pw::ft) -> forall l, ~In (w,(Some pw,l)) frontier)
+  \/
+  (~In (v,in_head) frontier
+    /\ forall w pw fh ft, ws++[v] = fh++(w::pw::ft) -> forall l, ~In (w,(Some pw,l)) frontier).
+Proof.
+  induction ws; intros; simpl in *.
   - (* base case *)
-    destruct (node_in_dec v (keys frontier)).
-    + left. exists []; exists v; exists []. simpl in *; auto.
-    + right. split; crush.
+    destruct (found_in_dec (v,in_head) frontier).
+    + right; left. exists []. repeat split; simpl in *; intros; auto.
+      destruct fh; inversion H.
+      remember (contains_sth_is_not_empty fh w (pw::ft)). crush.
+    + right. right. split; crush.
+      destruct fh; inversion H.
+      remember (contains_sth_is_not_empty fh w (pw::ft)). crush.
   - (* inductive case *)
-    destruct IHws as [IHws | IHws].
+    destruct (IHws v frontier in_head) as [IH | [IH | IH]].
     + left. destruct (node_in_dec a (keys frontier)).
-      * exists (ws++[v]); exists a; exists []. simpl in *. repeat split.
-        auto. intros. inversion H.
-      * repeat (elim IHws; clear IHws; intro; intro IHws).
+      * admit. (*exists (ws++[v]); exists a; exists []. simpl in *. repeat split.
+        auto. intros. inversion H. *)
+      * admit. (* repeat (elim IHws; clear IHws; intro; intro IHws).
         exists x. exists x0. exists (a::x1). repeat split; simpl in *; auto.
         rewrite H. auto. intros. destruct H1 as [H1 | H1].
-        rewrite H1 in *. auto. apply IHws. auto.
-    + destruct (node_in_dec a (keys frontier)).
+        rewrite H1 in *. auto. apply IHws. auto. *)
+    + admit. (* destruct (node_in_dec a (keys frontier)).
       * left. exists (ws++[v]); exists a; exists []. simpl in *. repeat split.
         auto. intros. inversion H.
       * right. destruct IHws as [IHws1 IHws2]. split. auto. intros.
-        destruct H as [H | H]; subst; auto.
+        destruct H as [H | H]; subst; auto. *)
+    + admit.
 Qed.
 
 Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
@@ -734,9 +761,6 @@ Proof.
   - exists p. assert (a = d). inversion H. crush. crush. crush.
 Qed.
 
-Lemma contains_sth_is_not_empty : forall {A} xs (x:A) ys, xs++(x::ys) <> [].
-Proof. induction xs; crush. Qed.
-
 Lemma last_subst_into' : forall {A} a (x:A) y b, a++[x] = y::b ->
   forall c, a++(x::c) = y::(b++c).
 Proof. induction a; intros; crush. Qed.
@@ -806,14 +830,6 @@ Qed.
 
 Lemma last_means_in : forall {A} a b (x:A), a = b++[x] -> In x a.
 Proof. induction b; crush. Qed.
-
-Lemma in_partitioning : forall {A} xs (x:A), In x xs ->
-  exists xs1 xs2, xs = xs1++x::xs2.
-Proof.
-  induction xs; intros. inversion H.
-  inversion H. exists []. exists xs. crush.
-  elim (IHxs _ H0); intros. elim H1; intros. exists (a::x0). exists x1. crush.
-Qed.
 
 Lemma not_last_in_front : forall {A} xs (x:A) ys y ys',
   xs ++ [x] = ys ++ (y::ys') -> forall a, In a ys -> In a xs.
