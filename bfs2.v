@@ -986,6 +986,31 @@ Proof.
   rewrite IHa. auto.
 Qed.
 
+Lemma hd_of_sublist : forall {A} b a c (x:A),
+  a = b ++ x::c -> hd_error a = hd_error (b ++ [x]).
+Proof.
+  induction b; intros; simpl in *.
+  - destruct a; crush.
+  - destruct a0; crush.
+Qed.
+
+Lemma d_head_path : forall g s d p,
+  reachableUsing g s d p -> hd_error p = Some d.
+Proof.
+  intros. inversion H; crush.
+Qed.
+
+Lemma reachable_halfway : forall g s xs x y ys,
+  reachableUsing g s x (xs ++ y :: ys) -> reachableUsing g s y (y :: ys).
+Proof.
+  induction xs; intros; simpl in *.
+  - inversion H; crush.
+  - inversion H; subst.
+    + remember (contains_sth_is_not_empty xs y ys) as H6.
+      clear HeqH6. rewrite <- H5 in H6. crush.
+    + apply (IHxs _ _ _ H5).
+Qed.
+
 Lemma bfs_corr:
   forall (g:graph) (s:node),
   forall (unexpanded:list node) (frontier:list found) (parent:list found),
@@ -1098,8 +1123,10 @@ Lemma bfs_corr:
 
       assert (forall w, In w (p_out ++ [v]) -> In w unexpanded) as HwvUnexpanded by
         (subst; intros; destruct (in_app_or _ _ _ H0); eauto; inversion H1; crush).
-      assert (Some u <> hd_error (p_out ++ [v])) as HhdOut
-        by admit.
+      assert (Some u <> hd_error (p_out ++ [v])) as HhdOut by
+        (rewrite <- (hd_of_sublist p_out p' p_in v Hp_split);
+         rewrite (d_head_path g s d p' Hp');
+         unfold not; intros Hud; apply n1; inversion Hud; crush).
       eelim (HextendFrontier _ v u HhdOut unexpanded HwvUnexpanded).
       {
         intros Hv'.
@@ -1322,8 +1349,8 @@ Lemma bfs_corr:
         symmetry in Heqhd_p_in; myinj' Heqhd_p_in.
         assert (forall x xs y ys, reachableUsing g s x (xs ++ y :: ys)
                                -> reachableUsing g s y (      y :: ys))
-          as HsubPath
-          by admit.
+          as HsubPath by
+          (intros; apply (reachable_halfway g s xs x y ys); auto).
         replace ( p_out ++  v  :: v_parent :: p_in)
            with ((p_out ++ [v]) ++ v_parent :: p_in) in * by crush.
         eauto.
