@@ -1050,9 +1050,12 @@ Lemma dijkstra_corr:
     forall n np, In (n, np) parent -> ~In n unexpanded
   ) /\ (
     forall n np, In (n, np) parent -> exists p, traceParent parent n = Some p
+  ) /\ ((
+    forall n np, In (n, np) parent -> forall w, In w (lookupDefault g [] n)
+      -> In w unexpanded -> exists len, In (w, (Some n, len)) frontier
   ) /\ (
     forall n  p, traceParent parent n = Some p -> shortestPath f g s n p
-  ))
+  )))
     -> forall ret, dijkstra f g unexpanded frontier parent = ret ->
   ((
     forall (d:node) (p':list node), reachableUsing g s d p' -> exists p, traceParent ret d = Some p
@@ -1068,7 +1071,8 @@ Lemma dijkstra_corr:
   rename H1 into HfrontierSorted;
   rename H2 into HparentExpanded;
   rename H3 into HparentSome;
-  rename H4 into HparentPaths;
+  rename H4 into HneighborFrontier;
+  rename H5 into HparentPaths;
   expandDijkstra;
   rename H0 into HparentPrepend;
   rename H1 into HfrontierInsert;
@@ -1306,8 +1310,18 @@ Lemma dijkstra_corr:
       splitHs; subst; split; auto; constructor.
     }
   }
-  
+
   {
+    assert ((forall (n1 : node) (np : option node * nat),
+      In (n1, np) parent' ->
+      forall w : node,
+      In w (lookupDefault g [] n1) ->
+      In w unexpanded' -> exists len : nat, In (w, (Some n1, len)) frontier'))
+    as HneighborFrontier'; [|split;[assumption|]].
+    
+    { admit. }
+
+    {
     intros v p Hvp.
     rewrite <- HparentPrepend in Hvp.
     revert HparentPaths; intro.
@@ -1383,6 +1397,7 @@ Lemma dijkstra_corr:
     symmetry in HeqtracePv.
     eapply HparentPaths; trivial.
   }
+
   Unfocus. (* base case: our invariants imply the conclusion *)
   
   intros; splitHs;
