@@ -867,16 +867,19 @@ Lemma in_path_edge :
   forall p' p a b p'' p''', p = ((p' ++ [a]) ++ b :: p'') ++ p''' ->
   forall g s d, reachableUsing g s d p ->
   hasEdge g b a.
-Admitted.
-(*
-  induction p'; intros.
-  simpl in H. inversion H0. crush.
-  subst. inversion H6. subst. inversion H1; subst. auto. 
-  inversion H0; subst. inversion H3.
-  inversion H4.
-  apply (IHp' p0 a0 b p'' p''' H4 g s d0 H1).
+Proof.
+  induction p'; intros; simpl in *.
+  - inversion H0; subst.
+    + inversion H0; subst. inversion H6; subst; auto.
+    + inversion H1; [subst; inversion H6; subst; auto|].
+      inversion H6; subst. inversion H0; subst.
+      inversion H6; subst. auto.
+  - destruct p; inversion H. inversion H0; subst.
+    + remember (contains_sth_is_not_empty (p'++[a0]) b (p''++p''')) as H1.
+      rewrite <- app_assoc in H8. rewrite <- app_comm_cons in H8.
+      clear HeqH1. rewrite <- H8 in H1. crush.
+    + eapply IHp'. Focus 2. apply H8. crush.
 Qed.
-*)
 
 Lemma edge_in_neigh : forall g a neigh,
   lookup g a = Some neigh -> forall b, hasEdge g a b -> In b neigh.
