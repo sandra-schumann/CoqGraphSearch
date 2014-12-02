@@ -723,8 +723,8 @@ Proof.
 Qed.
 
 Lemma HextendFrontier :
-  forall ws (v:node) d, hd_error (ws++[v]) = Some d -> (* d is destination *)
-  forall u, u <> d -> (* u is not destination *)
+  forall ws (v:node) u,
+  Some u <> hd_error (ws++[v]) -> (* u is not destination *)
   forall unexpanded,
   (forall w : node, In w (ws++[v]) -> In w unexpanded) -> (* everything unexpanded *)
   
@@ -734,35 +734,8 @@ Lemma HextendFrontier :
   \/
   (forall w, In w (ws++[v]) -> u <> w /\ In w unexpanded).
 Proof.
-(*  induction ws; intros; simpl in *.
-  - inversion H. rewrite H3 in *.
-    right; intros; split; crush.
-  - destruct (IHws v d u unexpanded u d) as [IH | IH]. *)
-
-(*  induction ws; intros; simpl in *.
-  - (* base case *)
-    destruct (found_in_dec (v,in_head) frontier).
-    + right; left. exists []. repeat split; simpl in *; intros; auto.
-      destruct fh; inversion H.
-      remember (contains_sth_is_not_empty fh w (pw::ft)). crush.
-    + right. right. split; crush.
-      destruct fh; inversion H.
-      remember (contains_sth_is_not_empty fh w (pw::ft)). crush.
-  - (* inductive case *)
-    destruct (IHws v frontier in_head) as [IH | [IH | IH]].
-    + left. destruct (node_in_dec a (keys frontier)).
-      * admit. (*exists (ws++[v]); exists a; exists []. simpl in *. repeat split.
-        auto. intros. inversion H. *)
-      * admit. (* repeat (elim IHws; clear IHws; intro; intro IHws).
-        exists x. exists x0. exists (a::x1). repeat split; simpl in *; auto.
-        rewrite H. auto. intros. destruct H1 as [H1 | H1].
-        rewrite H1 in *. auto. apply IHws. auto. *)
-    + admit. (* destruct (node_in_dec a (keys frontier)).
-      * left. exists (ws++[v]); exists a; exists []. simpl in *. repeat split.
-        auto. intros. inversion H.
-      * right. destruct IHws as [IHws1 IHws2]. split. auto. intros.
-        destruct H as [H | H]; subst; auto. *)
-    + *) admit.
+  intros. admit.
+(*  destruct (HextendFrontier' _ _ _ H). *) 
 Qed.
 
 Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
