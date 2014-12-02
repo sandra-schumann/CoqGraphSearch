@@ -1167,7 +1167,10 @@ Lemma dijkstra_corr:
              apply (in_path_edge _ _ _ _ _ _ Heqg' _ _ _ Hp')).
           generalize (edge_in_neigh _ _ _ (eq_sym Heqneighbors) _ Hhas_u_v); intro HuvInNeigh.
           Check (fun x => in_neigh_in_map _ x _ HuvInNeigh).
-          admit. (* TODO *)
+          simpl; assert (value u = Some u) as uisu by crush; rewrite uisu.
+          apply (@in_neigh_in_map node (option node * nat) v'
+                (fun x => (Some u, f u x + foundPathLen (u,pu)))
+                neighbors HuvInNeigh).
       }
 
       intros HNoInterference.
