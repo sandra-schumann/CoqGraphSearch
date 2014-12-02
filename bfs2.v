@@ -656,18 +656,17 @@ Qed.
 Lemma contains_sth_is_not_empty : forall {A} xs (x:A) ys, xs++(x::ys) <> [].
 Proof. induction xs; crush. Qed.
 
-Lemma HextendFrontier : forall ws (v:node) (frontier:list found) in_head,
-  (exists pre v' pv' post, ws++[v]=post++v'::pv'::pre
-    /\ exists l, In (v',(Some pv',l)) frontier
-    /\ (forall w pw fh ft, post++[v'] = fh++w::pw::ft -> forall (l:nat), ~In (w,(Some pw,l)) frontier))
+Lemma HextendFrontier : forall ws (v:node) (frontier:list found) unexpanded u d,
+  hd_error (ws++[v]) = Some d -> (* d is destination *)
+  u <> d -> (* u is not destination *)
+  (forall w : node, In w (ws++[v]) -> In w unexpanded) -> (* everything unexpanded *)
+  
+  (exists pre v' post, ws++[v] = post ++ v'::u::pre
+    /\ (forall w, In w post -> In w unexpanded))
   \/
-  (exists post, ws=post /\ In (v,in_head) frontier
-    /\ forall w pw fh ft, ws++[v] = fh++(w::pw::ft) -> forall l, ~In (w,(Some pw,l)) frontier)
-  \/
-  (~In (v,in_head) frontier
-    /\ forall w pw fh ft, ws++[v] = fh++(w::pw::ft) -> forall l, ~In (w,(Some pw,l)) frontier).
+  (forall w, In w (ws++[v]) -> w <> u /\ In w unexpanded).
 Proof.
-  induction ws; intros; simpl in *.
+(*  induction ws; intros; simpl in *.
   - (* base case *)
     destruct (found_in_dec (v,in_head) frontier).
     + right; left. exists []. repeat split; simpl in *; intros; auto.
@@ -690,7 +689,7 @@ Proof.
         auto. intros. inversion H.
       * right. destruct IHws as [IHws1 IHws2]. split. auto. intros.
         destruct H as [H | H]; subst; auto. *)
-    + admit.
+    + *) admit.
 Qed.
 
 Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
