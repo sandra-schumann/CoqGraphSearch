@@ -1109,9 +1109,9 @@ Lemma bfs_corr:
         - replace (p_out ++ v::p_in) with (p_out ++ [v] ++ p_in) in * by crush.
           rewrite app_assoc in *. rewrite Hp_split' in *.
           rewrite Hp_split. rewrite <- app_assoc. auto.
-        - admit. (* TODO: from HextendFrontier *)
-        - assert(v' <> u) by admit; assert (forall w, In w p_out' -> u <> w) by admit.
-          intros; eapply (remove_preserves _ _ _ HunepandedRemove); eauto.
+        - assert (In v unexpanded) by (eapply HwvUnexpanded; crush).
+          eapply remove_preserves; eauto.
+        - intros; eapply (remove_preserves _ _ _ HunepandedRemove); eauto.
         - rewrite <- HfrontierInsert. exists (S (foundPathLen (u, pu))).
           (* insert along with other things, and guess what, it is in there *)
           eapply insert_many_in. auto. left.
@@ -1124,21 +1124,14 @@ Lemma bfs_corr:
       }
 
       intros HNoInterference.
-      exists p_in; exists v; exists p_out; repeat split; eauto.
-      (*TODO
+      exists p_in; exists v; exists p_out.
+      destruct (HNoInterference v) as [HvNequ _]; [crush|].
+      repeat split; eauto.
       - eauto using remove_preserves.
-      - intros w Hw. specialize (HwUnexpanded w Hw). eapply remove_preserves; eauto.
-      - exists vp.
-        assert (In (v, (hd_error p_in, vp)) frontierRemaining)
-          (* discarded ++ (u, pu) :: frontierRemaining
-             v<>u
-             forall v, In v discarded -> ~ In v unexpanded
-             In v unexpanded
-          *)
-          by admit.
-        rewrite <- HfrontierInsert.
-        (* v,vp is in a list, we insert more things, v,vp is still there *)
-        admit.*)
+      - intros; assert (In w (p_out ++ [v])) by crush. 
+        destruct (HNoInterference w); eauto using remove_preserves.
+      - exists vp. eapply insert_many_in; eauto; right.
+        destruct HIn; [congruence|]. assumption.
     }
   }
 
