@@ -730,12 +730,22 @@ Lemma HextendFrontier :
   
   (exists pre v' post, ws++[v] = post ++ v'::u::pre
     /\ (In v' unexpanded /\ forall w, In w post -> In w unexpanded)
-    /\ v' <> u /\ (forall w, In w post -> w <> u))
+    /\ v' <> u /\ (forall w, In w post -> u <> w))
   \/
   (forall w, In w (ws++[v]) -> u <> w /\ In w unexpanded).
 Proof.
-  intros. admit.
-(*  destruct (HextendFrontier' _ _ _ H). *) 
+  intros.
+  destruct (HextendFrontier' _ _ _ H).
+  - elim H1; clear H1; intros pre H1.
+    elim H1; clear H1; intros v' H1.
+    elim H1; clear H1; intros post H1.
+    left. exists pre; exists v'; exists post.
+    destruct H1 as [H1 [H2 H3]]. repeat split; auto.
+    + apply H0. crush.
+    + intros. apply H0. crush.
+  - right; split; [|crush].
+    unfold not in *; intros; eapply H1.
+    apply H2. rewrite H3; auto.
 Qed.
 
 Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
