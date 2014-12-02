@@ -1087,13 +1087,14 @@ Lemma bfs_corr:
 
       assert (forall w, In w (p_out ++ [v]) -> In w unexpanded) as HwvUnexpanded by
         (subst; intros; destruct (in_app_or _ _ _ H0); eauto; inversion H1; crush).
-      eelim (HextendFrontier _ _ _ _ _ _ _ n1 HwvUnexpanded).
+      eelim (HextendFrontier _ _ _ _ _ HwvUnexpanded); eauto.
+      instantiate (1:=u).
       {
         intros Hv'.
         elim Hv'; clear Hv'; intros p_skip Hv'.
         elim Hv'; clear Hv'; intros v' Hv'.
         elim Hv'; clear Hv'; intros p_out' Hv'.
-        simpl in Hv'; destruct Hv' as [Hp_split' Hws'].
+        simpl in Hv'; destruct Hv' as [Hp_split' [[Hv' Hws'][Hu_neq_v Hu_neq_w]]].
         exists (u::p_skip ++ p_in). exists v'. exists p_out'. repeat split.
         - replace (p_out ++ v::p_in) with (p_out ++ [v] ++ p_in) in * by crush.
           rewrite app_assoc in *. rewrite Hp_split' in *.
