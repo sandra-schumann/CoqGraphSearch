@@ -1,4 +1,22 @@
-(** vim: set ts=2 sw=2 et : **)
+(************************************************************************)
+(* Written by Andres Erbsen and Sandra Schumann in 2014                 *)
+(* Public domain / CC0                                                  *)
+(************************************************************************)
+(** This library provides an implementation of a variant of Dijkstra's
+single source shortest paths algorithm on directed graphs. The input graph is
+represented as a mapping from nodes to the lists of their neighbors ([list
+(node*list node)]).  The length/cost/weight of moving from one node to another
+is specified by a function of type [node->node->nat], it is not present in the
+graph structure.  The output of the function [dijkstra] is a mapping from each
+reachable node to its predcessor in the shortest path to it. The helper
+[traceParent] can efficiently compute the shortest path to any node from that
+mapping, or conclude that no path exists. Thus, the shortest path from node [s]
+to node [d] in graph [g] with edge lengths [1] is [traceParent (dijkstra (fun
+u v => 1) g s) d]. The path obtained by this method is a list of nodes that
+contains both the start node and the end node, and the end node is first.*)
+
+(* begin hide *)
+(* vim: set filetype=coq ts=2 sw=2 et : *)
 Require Import Coq.Lists.List.
 Require Import Coq.Init.Datatypes.
 Require Import Coq.Init.Wf.
@@ -9,51 +27,64 @@ Require Import Recdef.
 Require Import Coq.Arith.Peano_dec.
 Require Import Coq.Arith.Compare_dec.
 Require Import Coq.omega.Omega.
-Require Import CpdtTactics.
 Require Import List.
 Import ListNotations.
-
+Require Import CpdtTactics.
+(* end hide *)
+(* *)
 Inductive node := Node : nat -> node.
-
-Definition node_eq_dec : forall (x y:node), {x = y} + {x <> y}.
-  decide equality. apply eq_nat_dec.
-Defined.
+Definition node_eq_dec : forall (x y:node), {x = y} + {x <> y}. repeat (decide equality). Defined.
 Definition node_eq_decb a b := if node_eq_dec a b then true else false.
 
-Lemma node_eq_decb_corr : forall a b, a = b <-> node_eq_decb a b = true.
-Proof.
-  intros; split; intro H; unfold node_eq_decb in *;
-  remember (node_eq_dec a b) as aisb; destruct aisb; auto.
-  inversion H.
-Qed.
-
-Definition node_in_dec := in_dec node_eq_dec.
-
-Definition adj := (node * list node)%type.
-Definition graph := list adj.
-Definition found := (node * (option node*nat))%type.
-Definition foundPathLen (p:found) : nat := snd (snd p).
-
-Definition found_eq_dec : forall(x y:found), {x = y} + {x <> y}.
-  repeat (decide equality).
-Qed.
-
-Definition found_in_dec := in_dec found_eq_dec.
-
-(** keys g gives all the first parts of adjs in a graph g (list of nodes) **)
-Definition keys {A:Type} := map (@fst node A).
+Definition graph := list (node * list node).
 
 Definition lookup {A:Type} (ps:list(node*A)) (x:node) :=
-    match find (fun p => node_eq_decb x (fst p)) ps with
-    | Some p => Some (snd p)
-    | None => None
-    end.
+  match find (fun p => node_eq_decb x (fst p)) ps with
+  | Some p => Some (snd p)
+  | None => None
+  end.
+
+(** Any input graph of the correct type will be interpreted as a graph, but one
+graph has multiple valid and equivalent representations. When a node appears in
+the adjacency list of some other node, but the graph contains no adjacency list
+for that node, the node's adjacency list is assumed to be empty.*)
 
 Definition lookupDefault {A:Type} (ps:list(node*A)) (default:A) (x:node) :=
   match lookup ps x with
   | None => default
   | Some y => y
   end.
+
+Definition hasEdge (g:graph) u v := In v (lookupDefault g [] u).
+
+Inductive hasPath : graph -> node -> node -> list node -> Prop :=
+| IdPath : forall g s, hasPath g s s [s]
+| ConsPath : forall g s u p,             hasPath g s u    p   ->
+             forall v, hasEdge g u v ->  hasPath g s v  (v::p).
+
+Function pathLength (f:node->node->nat) (p:list node) {measure length p} :=
+  match p with
+  | nil => 0
+  | [s] => 0
+  | v::u::p' => f u v + pathLength f (u::p')
+  end.
+crush. Defined.
+
+Notation shortestPath f g s d p := (
+             hasPath g s d p  /\
+  forall p', hasPath g s d p' -> pathLength f p' >= pathLength f p).
+
+Definition found := (node * (option node*nat))%type.
+Definition foundPathLen (p:found) : nat := snd (snd p).
+Definition found_eq_dec : forall(x y:found), {x = y} + {x <> y}.
+  repeat (decide equality).
+Qed.
+
+Definition node_in_dec := in_dec node_eq_dec.
+Definition found_in_dec := in_dec found_eq_dec.
+
+(** keys g gives all the first parts of adjs in a graph g (list of nodes) **)
+Definition keys {A:Type} := map (@fst node A).
 
 Ltac myinj H := injection H; clear H; intros; try subst.
 Ltac myinj' H :=
@@ -155,8 +186,6 @@ Lemma lookup_corr : forall {A:Type} ps, NoDup (keys ps) ->
 Proof.
   intros. split. apply lookup_in. apply in_lookup; crush.
 Qed.
-
-Definition hasEdge (g:graph) u v := In v (lookupDefault g [] u).
 
 Lemma remove_length' : forall v vs,
   length vs >= length (remove node_eq_dec v vs) /\
@@ -577,7 +606,7 @@ Ltac expandDijkstra :=
           ; injection H; clear H; intro; intro; intro
     end.
 
-Function dijkstra f
+Function dijkstra' f
   (g:graph) (unexpanded:list node) (frontier:list found) (parent:list found)
   {measure length unexpanded}
   : list found
@@ -586,13 +615,13 @@ Function dijkstra f
   | None => parent
   | Some args =>
       let (args', parent') := args in let (unexpanded', frontier') := args' in
-      dijkstra f g unexpanded' frontier' parent'
+      dijkstra' f g unexpanded' frontier' parent'
   end.
 intros. expandDijkstra. remember (closestUnexpanded_unexpanded _ _ _ _ Heqc) as H2.
 simpl in *. specialize (remove_length _ _ H2). intros. subst. omega.
 Defined.
 
-Functional Scheme dijkstra_ind := Induction for dijkstra Sort Prop.
+Functional Scheme dijkstra_ind := Induction for dijkstra' Sort Prop.
 
 Fixpoint traceParent
   (parent:list found) (v:node)
@@ -740,11 +769,6 @@ Proof.
     apply H2. rewrite H3; auto.
 Qed.
 
-Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
-| IdPath : forall g s, reachableUsing g s s [s]
-| ConsPath : forall g s u p,             reachableUsing g s u    p   ->
-             forall v, hasEdge g u v ->  reachableUsing g s v  (v::p).
-
 Lemma removing_corr_item : forall x xs xs',
   remove node_eq_dec x xs = xs' ->
   forall x', ~(In x' xs') -> In x' xs -> x = x'.
@@ -797,7 +821,7 @@ Proof.
   inversion H.
 Qed.
 
-Lemma reachableUsing_head: forall g s d p, reachableUsing g s d p ->
+Lemma hasPath_head: forall g s d p, hasPath g s d p ->
   p <> [] -> exists t, p = d::t.
 Proof.
   induction p; intros; simpl in *.
@@ -825,7 +849,7 @@ Proof.
 Qed.
 
 Lemma dest_different_end_nonempty : forall p_out' g s d p',
-  reachableUsing g s d p' ->
+  hasPath g s d p' ->
   forall u, u <> d ->
   forall p_out v p_in, p' = p_out ++ v :: p_in ->
   forall p_skip, p_out ++ [v] = p_out' ++ u :: p_skip ->
@@ -835,7 +859,7 @@ Proof.
   assert (p_out <> []). unfold not; intros. rewrite H3 in *; clear H3.
     simpl in *.
     assert (p' <> []). rewrite H1. unfold not; intros. inversion H3.
-    elim (reachableUsing_head _ _ _ _ H H3); intros.
+    elim (hasPath_head _ _ _ _ H H3); intros.
     destruct p_out'. inversion H2. subst. inversion H1. crush.
     inversion H2. remember (contains_sth_is_not_empty p_out' u p_skip) as H8.
     crush.
@@ -845,14 +869,14 @@ Proof.
     inversion H2.
     assert (n :: p_out ++ v :: p_in <> []).
       unfold not; intros. inversion H1.
-    elim (reachableUsing_head _ _ _ _ H H1); intros.
+    elim (hasPath_head _ _ _ _ H H1); intros.
     inversion H6. subst. apply H0; auto.
   apply nonempty_has_last. auto.
 Qed.
 
 Lemma in_path_edge :
   forall p' p a b p'' p''', p = ((p' ++ [a]) ++ b :: p'') ++ p''' ->
-  forall g s d, reachableUsing g s d p ->
+  forall g s d, hasPath g s d p ->
   hasEdge g b a.
 Proof.
   induction p'; intros; simpl in *.
@@ -934,7 +958,7 @@ Lemma HextendFrontier_not_u :
   (forall w : node, In w p_out -> In w unexpanded) ->
   p' = p_out ++ v :: p_in ->
   u <> d -> 
-  reachableUsing g s d p' ->
+  hasPath g s d p' ->
   remove node_eq_dec u unexpanded = unexpanded' ->
   fold_right (insert foundPathLen) frontierRemaining
     (map
@@ -990,13 +1014,13 @@ Proof.
 Qed.
 
 Lemma d_head_path : forall g s d p,
-  reachableUsing g s d p -> hd_error p = Some d.
+  hasPath g s d p -> hd_error p = Some d.
 Proof.
   intros. inversion H; crush.
 Qed.
 
 Lemma reachable_halfway : forall g s xs x y ys,
-  reachableUsing g s x (xs ++ y :: ys) -> reachableUsing g s y (y :: ys).
+  hasPath g s x (xs ++ y :: ys) -> hasPath g s y (y :: ys).
 Proof.
   induction xs; intros; simpl in *.
   - inversion H; crush.
@@ -1006,28 +1030,11 @@ Proof.
     + apply (IHxs _ _ _ H5).
 Qed.
 
-Function pathLength (f:node->node->nat) (p:list node)
-  {measure length p}
-  : nat
-  :=
-  match p with
-  | nil => 0
-  | [s] => 0
-  | v::u::p' => f u v + pathLength f (u::p')
-  end.
-crush.
-Defined.
-
-Notation shortestPath f g s d p := (
-  reachableUsing g s d p
-  /\
-  (forall p', reachableUsing g s d p' -> pathLength f p' >= pathLength f p)).
-
-Lemma dijkstra_corr:
+Lemma dijkstra_corr':
   forall (f:node->node->nat) (g:graph) (s:node),
   forall (unexpanded:list node) (frontier:list found) (parent:list found),
   ((
-    forall (d:node) (p':list node), reachableUsing g s d p' ->
+    forall (d:node) (p':list node), hasPath g s d p' ->
       if node_in_dec d unexpanded
       then exists p_in v p_out, p' = p_out ++ v::p_in
            /\ In v unexpanded
@@ -1040,7 +1047,7 @@ Lemma dijkstra_corr:
       | None => v = s /\ l = 0
       | Some u => exists p,
           traceParent parent u = Some p /\
-          reachableUsing g s v (v::p) /\
+          hasPath g s v (v::p) /\
           pathLength f (v::p) = l
                                         (*todo: replace with hasEdge ? *)
       end
@@ -1053,15 +1060,15 @@ Lemma dijkstra_corr:
   ) /\ (
     forall n  p, traceParent parent n = Some p -> shortestPath f g s n p
   ))
-    -> forall ret, dijkstra f g unexpanded frontier parent = ret ->
+    -> forall ret, dijkstra' f g unexpanded frontier parent = ret ->
   ((
-    forall (d:node) (p':list node), reachableUsing g s d p' -> exists p, traceParent ret d = Some p
+    forall (d:node) (p':list node), hasPath g s d p' -> exists p, traceParent ret d = Some p
   ) /\ (
     forall (d:node) (p:list node), traceParent ret d = Some p -> shortestPath f g s d p
   ))
 .
   intros until parent.
-  functional induction (dijkstra f g unexpanded frontier parent). Focus 2.
+  functional induction (dijkstra' f g unexpanded frontier parent). Focus 2.
   intros until ret; eapply IHl; clear IHl;
   splitHs; split; [|split;[|split;[|split;[|split]]]];
   rename H0 into HfrontierParents;
@@ -1362,8 +1369,8 @@ Lemma dijkstra_corr:
           eapply Hv_parent_shortest.
           destruct p_in as [|v_parent_]; [inversion Heqhd_p_in|].
           symmetry in Heqhd_p_in; myinj' Heqhd_p_in.
-          assert (forall x xs y ys, reachableUsing g s x (xs ++ y :: ys)
-                                 -> reachableUsing g s y (      y :: ys))
+          assert (forall x xs y ys, hasPath g s x (xs ++ y :: ys)
+                                 -> hasPath g s y (      y :: ys))
             as HsubPath by
             (intros; apply (reachable_halfway g s xs x y ys); auto).
           replace ( p_out ++  v  :: v_parent :: p_in)
@@ -1441,60 +1448,60 @@ Proof.
     (simpl; intros; destruct H1; [crush|right]; apply in_or_app; right; eauto).
 Qed.
 
-Lemma reachableUsing_in_nodes:
-  forall g u v p, reachableUsing g u v p -> In u (nodes g) -> In v (nodes g).
+Lemma hasPath_in_nodes:
+  forall g u v p, hasPath g u v p -> In u (nodes g) -> In v (nodes g).
 Proof.
   induction 1; crush. specialize (hasEdge_in_nodes g u v); crush.
 Qed.
 
-Lemma reachableUsing_in_nodes':
-  forall g u v p, reachableUsing g u v p -> u <> v -> In v (nodes g).
+Lemma hasPath_in_nodes':
+  forall g u v p, hasPath g u v p -> u <> v -> In v (nodes g).
 Proof.
   induction 1; crush. specialize (hasEdge_in_nodes g u v); crush.
 Qed.
 
-Lemma reachableUsing_path_in_nodes:
-  forall g u v p, reachableUsing g u v p ->
+Lemma hasPath_path_in_nodes:
+  forall g u v p, hasPath g u v p ->
   forall w, In w (removelast p) -> In w (nodes g).
 Proof.
   induction 1; [crush|].
   intros.
   destruct p; [crush|].
   replace (removelast (v :: n :: p)) with (v::removelast (n :: p)) in * by crush.
-  destruct H1; [|eauto]; clear IHreachableUsing.
+  destruct H1; [|eauto]; clear IHhasPath.
   subst. eapply hasEdge_in_nodes; eauto.
 Qed.
 
-Definition dijkstra' f g s := dijkstra f g (s::nodes g) [(s,(None,0))] [].
+Definition dijkstra f g s := dijkstra' f g (s::nodes g) [(s,(None,0))] [].
 
-Lemma reachableUsing_tail: forall g s d p, reachableUsing g s d p -> p = removelast p ++ [s].
+Lemma hasPath_tail: forall g s d p, hasPath g s d p -> p = removelast p ++ [s].
   (* XXX: crush hangs here *)
   induction 1; [reflexivity|].
   simpl in *; destruct p; [unfold not; intros; subst; simpl in *; congruence|].
   rewrite <- app_comm_cons.
-  apply f_equal; apply IHreachableUsing.
+  apply f_equal; apply IHhasPath.
 Qed.
 
-Lemma dijkstra_corr':
-  forall (f:node->node->nat) (g:graph) (s:node) ret, dijkstra' f g s = ret ->
+Lemma dijkstra_corr:
+  forall (f:node->node->nat) (g:graph) (s:node) ret, dijkstra f g s = ret ->
   ((
-    forall (d:node) (p':list node), reachableUsing g s d p' -> exists p, traceParent ret d = Some p
+    forall (d:node) (p':list node), hasPath g s d p' -> exists p, traceParent ret d = Some p
   ) /\ (
     forall (d:node) (p:list node), traceParent ret d = Some p -> shortestPath f g s d p
   )).
-  unfold dijkstra'.
+  unfold dijkstra.
   intros.
-  eapply dijkstra_corr; [|apply H]; clear H; repeat split; intros; try solve [pv].
+  eapply dijkstra_corr'; [|apply H]; clear H; repeat split; intros; try solve [pv].
   { destruct (node_in_dec d (s::nodes g)).
     - exists []. exists s. exists (removelast p'). repeat split.
-      + eapply reachableUsing_tail; eauto.
+      + eapply hasPath_tail; eauto.
       + left; reflexivity.
-      + intros. right. eapply reachableUsing_path_in_nodes; eauto.
+      + intros. right. eapply hasPath_path_in_nodes; eauto.
       + exists 0. left; reflexivity.
     - assert False; [|pv]; apply n.
       destruct (node_eq_dec s d).
       + left; trivial.
-      +  right. eapply reachableUsing_in_nodes'; eauto.
+      +  right. eapply hasPath_in_nodes'; eauto.
   }
   {
     destruct H; [|pv].
@@ -1526,7 +1533,7 @@ Section ex1. (* Dijkstra example from CLRS 3rd edition *)
   ].
   
   Definition unitLength (u v:node) := 1.
-  Example dijkstra_ex1 : traceParent (dijkstra' unitLength g s) v = Some [v;r;s].
+  Example dijkstra_ex1 : traceParent (dijkstra unitLength g s) v = Some [v;r;s].
     reflexivity. Qed.
-  Eval compute in (dijkstra' unitLength g s).
+  Eval compute in (dijkstra unitLength g s).
 End ex1.
