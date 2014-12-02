@@ -656,16 +656,89 @@ Qed.
 Lemma contains_sth_is_not_empty : forall {A} xs (x:A) ys, xs++(x::ys) <> [].
 Proof. induction xs; crush. Qed.
 
-Lemma HextendFrontier : forall ws (v:node) (frontier:list found) unexpanded u d,
-  hd_error (ws++[v]) = Some d -> (* d is destination *)
-  u <> d -> (* u is not destination *)
+Lemma singleton_is_list : forall {A} y xs (x:A) xs',
+  [y] = xs++x::xs' -> y = x /\ xs = [] /\ xs' = [].
+Proof.
+  intros. destruct xs.
+  - repeat split; crush.
+  - inversion H. remember (contains_sth_is_not_empty xs x xs') as H3. crush.
+Qed.
+
+Lemma HextendFrontier' :
+  forall (v:node) u ws,
+  Some u <> hd_error (ws++[v]) -> (* u is not destination *)
+  ((exists pre v' post, ws++[v] = post ++ v'::u::pre /\ v' <> u
+    /\ forall w, In w post -> u <> w)
+  \/
+  (forall w, In w (ws++[v]) -> w <> u)).
+Proof.
+  induction ws; intros; simpl in *.
+  - right; intros; crush.
+  - destruct (ws++[v]).
+    + right. intros. destruct H0 as [H0 | H0]; crush.
+    + simpl in *. destruct (node_eq_dec u n).
+      * rewrite <- e in *. left. exists l; exists a; exists []. repeat split.
+        { unfold not; intros. rewrite H0 in *; crush. }
+        { intros. inversion H0. } 
+      * assert (Some u <> value n).
+          { unfold not; intros. inversion H0; crush. }
+        destruct (IHws H0) as [IHws' | IHws'].
+        {
+          elim IHws'; clear IHws'; intros pre IHws'.
+          elim IHws'; clear IHws'; intros v' IHws'.
+          elim IHws'; clear IHws'; intros post IHws'.
+          left. exists pre; exists v'; exists (a::post).
+          repeat split; [crush|crush|].
+          intros. destruct H1 as [H1 | H1].
+          - unfold not; intro Heq; rewrite Heq in *; crush.
+          - apply IHws'; crush.
+        }
+        {
+          right; intros. destruct H1 as [H1 | H1].
+          - rewrite H1 in *. unfold not in *; intros.
+            apply H; crush.
+          - apply IHws'; crush.
+        }
+Qed.
+
+Lemma HextendFrontier'' : forall ws v post v' pre unexpanded,
+  ws ++ [v] = post ++ v'::pre ->
+  (forall w : node, In w (ws++[v]) -> In w unexpanded) ->
+  In v' unexpanded /\ (forall w : node, In w post -> In w unexpanded).
+Proof.
+  induction ws; intros; simpl in *; split.
+  - destruct (singleton_is_list v post v' pre H) as [H2 [H3 H4]].
+    apply H0; left; crush.
+  - destruct (singleton_is_list v post v' pre H) as [H2 [H3 H4]].
+    crush.
+  - destruct post; simpl in *; inversion H; apply H0; auto.
+    inversion H. assert (forall w, In w (ws++[v]) -> In w unexpanded) by crush.
+    destruct (IHws _ _ _ _ _ H3 H1) as [IH _]. crush.
+  - destruct post; simpl in *; intros.
+    + inversion H1.
+    + inversion H. destruct H1 as [H1 | H1]; crush. eapply IHws.
+      * apply H4.
+      * intros; apply H0; right; auto.
+      * crush.
+Qed.
+
+Lemma HextendFrontier :
+  forall ws (v:node) d, hd_error (ws++[v]) = Some d -> (* d is destination *)
+  forall u, u <> d -> (* u is not destination *)
+  forall unexpanded,
   (forall w : node, In w (ws++[v]) -> In w unexpanded) -> (* everything unexpanded *)
   
   (exists pre v' post, ws++[v] = post ++ v'::u::pre
-    /\ (forall w, In w post -> In w unexpanded))
+    /\ (In v' unexpanded /\ forall w, In w post -> In w unexpanded)
+    /\ v' <> u /\ (forall w, In w post -> w <> u))
   \/
-  (forall w, In w (ws++[v]) -> w <> u /\ In w unexpanded).
+  (forall w, In w (ws++[v]) -> u <> w /\ In w unexpanded).
 Proof.
+(*  induction ws; intros; simpl in *.
+  - inversion H. rewrite H3 in *.
+    right; intros; split; crush.
+  - destruct (IHws v d u unexpanded u d) as [IH | IH]. *)
+
 (*  induction ws; intros; simpl in *.
   - (* base case *)
     destruct (found_in_dec (v,in_head) frontier).
