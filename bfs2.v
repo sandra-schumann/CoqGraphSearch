@@ -1362,14 +1362,15 @@ Lemma bfs_corr:
     revert H; intro.
     specialize (H d p' Hp').
     destruct (node_in_dec d unexpanded). {
-      assert (forall u pu, In (u,pu) frontier -> ~ In u unexpanded) as HfrontierExpanded
-        by admit.
+      assert (bfs_step g unexpanded frontier parent = None ->
+        forall u pu, In (u,pu) frontier -> ~ In u unexpanded)
+        as HfrontierExpanded by admit.
       elim H; clear H; intros p_in H.
       elim H; clear H; intros v H.
       elim H; clear H; intros p_out H.
       destruct H as [_ [HvUnexpanded [_ HvFrontier]]].
       elim HvFrontier; clear HvFrontier; intros vp HvFrontier.
-      specialize (HfrontierExpanded _ _ HvFrontier).
+      specialize (HfrontierExpanded e _ _ HvFrontier).
       destruct (HfrontierExpanded HvUnexpanded).
     }
     elim H; intros p Hp.
