@@ -1191,20 +1191,19 @@ Lemma bfs_corr:
       apply (fun pf => HparentExpanded u x pf HminUnexpanded). auto;
     fail "end Focus 2".
 
-    (* TODO: refactor some of the next lines, they appear again below...*)
     assert (In (u,pu) frontier) as HuInFrontier.
       rewrite Hfrontier_split; apply in_or_app; right; left; crush.
     destruct pu as [upptr ul].
     generalize (HfrontierParents _ _ _ HuInFrontier) as HuReachable; intro.
     generalize (lookup_neighbors _ _ _ (eq_sym Heqneighbors)) as HneighborEdges; intro.
-    (* TODO: move this into the following induction in place of an admit *)
 
-    revert HuReachable Hnew HparentPrepend; clear;
-    intros HuReachable Hnew HparentPrepend.
+    revert HuReachable Hnew HparentPrepend HneighborEdges; clear;
+    intros HuReachable Hnew HparentPrepend HneighborEdges.
     induction neighbors; [pv|].
     simpl in Hnew; destruct Hnew as [HNow|Hbefore].
     Focus 2.
-      eapply IHneighbors. clear IHneighbors; eauto.
+      eapply IHneighbors; clear IHneighbors; eauto.
+      intros v0 Hv0. eapply HneighborEdges; right; eauto;
     fail "end Focus 2".
     clear IHneighbors.
     injection HNow; clear HNow; intros.
@@ -1216,14 +1215,14 @@ Lemma bfs_corr:
       elim HuReachable; intros u_parent_path Hu_parent_path. exists (u::u_parent_path).
       repeat split; splitHs.
       - simpl. destruct (node_eq_dec u u); [|pv]. rewrite H2; reflexivity.
-      - econstructor; eauto. admit. (* TODO: HneighborEdges *)
+      - econstructor; eauto. eapply HneighborEdges; crush.
       - simpl. replace (S (length u_parent_path)) with ul by auto.
         unfold foundPathLen in *; auto.
     } {
       elim HuReachable; intros; splitHs; subst.
       exists [s]; repeat split; simpl; eauto.
       - destruct (node_eq_dec s s); pv.
-      - econstructor. instantiate (1:=s). constructor. admit. (* TODO: HneighborEdges *)
+      - econstructor. instantiate (1:=s). constructor. eapply HneighborEdges; crush.
     }
   }
 
