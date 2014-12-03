@@ -1,4 +1,22 @@
-(** vim: set ts=2 sw=2 et : **)
+(* vim: set filetype=coq ts=2 sw=2 et : *)
+(************************************************************************)
+(* Written by Andres Erbsen and Sandra Schumann in 2014                 *)
+(* Public domain / CC0                                                  *)
+(************************************************************************)
+(** This library provides an implementation of a variant of Dijkstra's
+single source shortest paths algorithm on directed graphs. The input graph is
+represented as a mapping from nodes to the lists of their neighbors ([list
+(node*list node)]).  The length/cost/weight of moving from one node to another
+is specified by a function of type [node->node->nat], it is not present in the
+graph structure.  The output of the function [dijkstra] is a mapping from each
+reachable node to its predcessor in the shortest path to it. The helper
+[traceParent] can efficiently compute the shortest path to any node from that
+mapping, or conclude that no path exists. Thus, the shortest path from node [s]
+to node [d] in graph [g] with edge lengths [1] is [traceParent (dijkstra (fun
+u v => 1) g s) d]. The path obtained by this method is a list of nodes that
+contains both the start node and the end node, and the end node is first.*)
+
+(* begin hide *)
 Require Import Coq.Lists.List.
 Require Import Coq.Init.Datatypes.
 Require Import Coq.Init.Wf.
@@ -12,48 +30,55 @@ Require Import Coq.omega.Omega.
 Require Import CpdtTactics.
 Require Import List.
 Import ListNotations.
-
+(* end hide *)
+(* *)
 Inductive node := Node : nat -> node.
-
-Definition node_eq_dec : forall (x y:node), {x = y} + {x <> y}.
-  decide equality. apply eq_nat_dec.
-Defined.
+Definition node_eq_dec : forall (x y:node), {x = y} + {x <> y}. repeat (decide equality). Defined.
 Definition node_eq_decb a b := if node_eq_dec a b then true else false.
 
-Lemma node_eq_decb_corr : forall a b, a = b <-> node_eq_decb a b = true.
-Proof.
-  intros; split; intro H; unfold node_eq_decb in *;
-  remember (node_eq_dec a b) as aisb; destruct aisb; auto.
-  inversion H.
-Qed.
-
-Definition node_in_dec := in_dec node_eq_dec.
-
-Definition adj := (node * list node)%type.
-Definition graph := list adj.
-Definition found := (node * (option node*nat))%type.
-Definition foundPathLen (p:found) : nat := snd (snd p).
-
-Definition found_eq_dec : forall(x y:found), {x = y} + {x <> y}.
-  repeat (decide equality).
-Qed.
-
-Definition found_in_dec := in_dec found_eq_dec.
-
-(** keys g gives all the first parts of adjs in a graph g (list of nodes) **)
-Definition keys {A:Type} := map (@fst node A).
+Definition graph := list (node * list node).
 
 Definition lookup {A:Type} (ps:list(node*A)) (x:node) :=
-    match find (fun p => node_eq_decb x (fst p)) ps with
-    | Some p => Some (snd p)
-    | None => None
-    end.
+  match find (fun p => node_eq_decb x (fst p)) ps with
+  | Some p => Some (snd p)
+  | None => None
+  end.
+
+(** Any input graph of the correct type will be interpreted as a graph, but one
+graph has multiple valid and equivalent representations. When a node appears in
+the adjacency list of some other node, but the graph contains no adjacency list
+for that node, the node's adjacency list is assumed to be empty.*)
 
 Definition lookupDefault {A:Type} (ps:list(node*A)) (default:A) (x:node) :=
   match lookup ps x with
   | None => default
   | Some y => y
   end.
+
+Definition hasEdge (g:graph) u v := In v (lookupDefault g [] u).
+
+Inductive hasPath : graph -> node -> node -> list node -> Prop :=
+| IdPath : forall g s, hasPath g s s [s]
+| ConsPath : forall g s u p,             hasPath g s u    p   ->
+             forall v, hasEdge g u v ->  hasPath g s v  (v::p).
+
+Notation shortestPath g s d p := (
+               hasPath g s d p /\
+    forall p', hasPath g s d p' -> length p' >= length p).
+
+Definition found := (node * (option node*nat))%type.
+Definition foundPathLen (p:found) : nat := snd (snd p).
+Definition found_eq_dec : forall(x y:found), {x = y} + {x <> y}.
+  repeat (decide equality).
+Qed.
+
+Definition node_in_dec := in_dec node_eq_dec.
+Definition found_in_dec := in_dec found_eq_dec.
+
+(** keys g gives all the first parts of adjs in a graph g (list of nodes) **)
+Definition keys {A:Type} := map (@fst node A).
+
+(** Here come tactics. Nothing innovative, but faster and tidier than crush (even though less effective). *)
 
 Ltac myinj H := injection H; clear H; intros; try subst.
 Ltac myinj' H :=
@@ -93,6 +118,8 @@ Ltac pv := repeat (
   intros; try pve;
   intros; try mysimp;
   intros; eauto).
+
+(** We use [list(node,A)] as a map from node to [A]. For a graph, [A] is [list(node)] **)
 
 Lemma in_fst_in_keys :
   forall {A:Type} x (y:A) ps, In (x, y) ps -> In x (keys ps).
@@ -156,8 +183,9 @@ Proof.
   intros. split. apply lookup_in. apply in_lookup; crush.
 Qed.
 
-Definition hasEdge (g:graph) u v := In v (lookupDefault g [] u).
-
+(** On each iteration of an inner loop, our BFS removes one item from the
+  frontier. The fact that the frontier indeed gets smaller as a result of
+  that is necessary for showing termination. *)
 Lemma remove_length' : forall v vs,
   length vs >= length (remove node_eq_dec v vs) /\
   (In v vs -> length vs > length (remove node_eq_dec v vs)).
@@ -181,6 +209,9 @@ Proof.
   intros v vs. apply remove_length'.
 Qed.
 
+(** As appending to a list is not faster than a seek-and-insert, we keep the
+ frontier sorted as in Dijkstra's algorithm. *)
+
 Fixpoint insert {A:Type} (f:A->nat) (y:A) (xs:list A) : list A :=
   match xs with
   | nil => [y]
@@ -195,6 +226,8 @@ Definition extractMin {A:Type} (f:A->nat) (frontier : list A) :
     | p::frontier' => Some (p, frontier')
     end.
 
+(** The following is a slight adaptation of the [sorted] property from lecture
+ notes; a function which maps the container elements to a [nat]-s by which they are sorted is provided as an argumant. *)
 Definition list_all {A:Type} (P:A->Prop) (xs:list A) : Prop := 
   fold_right (fun h t => P h /\ t) True xs.
 
@@ -237,32 +270,6 @@ Proof.
   inversion H0.
   destruct H as [H1 H2]. destruct H0 as [H0 | H0].
   subst. auto.
-  auto.
-Qed.
-
-Lemma extractMin_shorter : forall {A:Type} (f:A->nat) (frontier : list A),
-  forall x xs, extractMin f frontier = Some (x,xs) ->
-  length frontier = S (length xs).
-Proof.
-  intros. unfold extractMin in *. destruct frontier.
-  crush.
-  inversion H. crush.
-Qed.
-
-Lemma extractMin_corr : forall {A:Type} (f:A->nat) (frontier : list A),
-  sorted f frontier ->
-    match extractMin f frontier with
-    | None => frontier = nil
-    | Some ret => forall p, In p frontier -> 
-            (f p >= f (fst ret) /\ (p <> (fst ret) -> In p (snd ret)))
-    end.
-Proof.
-  intros. unfold extractMin. destruct frontier. auto.
-  destruct H as[H1 H2]. intros. split.
-  simpl in *. destruct H as [H | H].
-  subst. auto. remember (if_all_then_x _ _ _ H2 H) as H3. simpl in H3.
-  omega.
-  simpl in *. intros. destruct H as [H | H]. destruct H0. auto.
   auto.
 Qed.
 
@@ -315,7 +322,45 @@ Proof.
   apply insert_in; crush.
   apply insert_sorted; crush.
 Qed.
+
+(** Frontier decreases in size -- our termination argument *)
+Lemma extractMin_shorter : forall {A:Type} (f:A->nat) (frontier : list A),
+  forall x xs, extractMin f frontier = Some (x,xs) ->
+  length frontier = S (length xs).
+Proof.
+  intros. unfold extractMin in *. destruct frontier.
+  crush.
+  inversion H. crush.
+Qed.
+
+(** Other relevant properties of taking the first element from a sorted list *)
+Lemma extractMin_corr : forall {A:Type} (f:A->nat) (frontier : list A),
+  sorted f frontier ->
+    match extractMin f frontier with
+    | None => frontier = nil
+    | Some ret => forall p, In p frontier -> 
+            (f p >= f (fst ret) /\ (p <> (fst ret) -> In p (snd ret)))
+    end.
+Proof.
+  intros. unfold extractMin. destruct frontier. auto.
+  destruct H as[H1 H2]. intros. split.
+  simpl in *. destruct H as [H | H].
+  subst. auto. remember (if_all_then_x _ _ _ H2 H) as H3. simpl in H3.
+  omega.
+  simpl in *. intros. destruct H as [H | H]. destruct H0. auto.
+  auto.
+Qed.
+
   
+(** Textbook imperative BFS processes one node from the frontier on each iteration.
+    Encoding the algorithm this way would make the termination argument more
+    complicated; instead we separate out an inner loop. On each iteration of
+    the outer loop, our BFS loops through the elements in the frontier until
+    it finds one that is not yet expanded. That node is removed from the list of
+    unexpanded nodes before continuing with the outer loop. This provides a
+    convenient termination argument. [closestUnexpanded] implements the
+    said inner loop and returns the first node from the frontier for which
+    has not yet been expanded.*)
 Function closestUnexpanded
     (f:found->nat) (unexpanded : list node) (frontier : list found)
     {measure length frontier}
@@ -406,6 +451,9 @@ Proof.
   auto. auto. auto.
 Qed.
 
+(** Properties of [remove] will be used to show that various invariants are preserved
+    bteween iterations of the main loop. It's a pity that we didn't find these from
+    the standard library...*)
 Lemma remove_does_not_add' : forall (u:node) (xs:list node) (ys:list node),
   remove node_eq_dec u xs = ys ->
   forall (v:node), In v ys -> In v xs.
@@ -446,6 +494,7 @@ Proof.
   destruct H0 as [H0 | H0]; crush.
 Qed.
 
+(** [find] is used in [lookup] (our map accessor operation) *)
 Lemma find_head : forall {A} (f:A->bool) x xs,
   (if f x then True else False) -> (find f (x::xs) = Some x).
 Proof.
@@ -476,6 +525,7 @@ Proof.
   apply IHxs. intros. apply H. right. auto.
 Qed.
 
+(** On each iteration, BFS pushes the neighbors of the node it expanded into the frontier. The following lemmas describe the non-surprising properties of inserting multiple items. *)
 Lemma insert_many_in : forall {A} (f:A->nat) (xs:list A) (ys:list A) (zs:list A),
   fold_right (insert f) ys xs = zs ->
   forall (z:A), (In z xs \/ In z ys) -> In z zs.
@@ -538,8 +588,7 @@ Proof.
   eapply insert_many_in. apply H. right. auto.
 Qed.
 
-(* inlining bfs_step to bfs did NOT give us functional induction, but
-   separating it out did... *)
+(** [bfs_step] contains most of the algorithm logic. If the output is [None], the [bfs] terminates; otherwise the output is the input to the next step. Curiously, inlining the definition of [bfs_step] into [bfs] did not give us [functional induction], but the code here did. [parent] is the output accululator, the graph [g] is never modified. The start node is specified by setting it as the only element in the frontier on the top-level call. *)
 Definition bfs_step
   (g:graph) (unexpanded:list node) (frontier:list found) (parent:list found)
   := match closestUnexpanded foundPathLen unexpanded frontier with
@@ -555,6 +604,8 @@ Definition bfs_step
           Some (unexpanded', frontier', parent')
   end.
 
+(** [expandBFS] operates on a proof state that contains a call to [bfs_step]
+  that returned [Some] and [remember]-s the local variables defined using [let] in the body of [bfs_step] *)
 Ltac splitHs := repeat (match goal with [ H : _ /\ _ |- _ ] => destruct H end).
 Ltac expandBFS := 
     match goal with
@@ -592,8 +643,7 @@ intros. expandBFS. remember (closestUnexpanded_unexpanded _ _ _ _ Heqc) as H2.
 simpl in *. specialize (remove_length _ _ H2). intros. subst. omega.
 Defined.
 
-Functional Scheme bfs_ind := Induction for bfs Sort Prop.
-
+(** [traceParent] operates on the output of [bfs]. Given a node to which there exists a path from the start node, it reconstructs the shortest path from start to that node. If no such path exists, [traceParent] returns [None]. The first element in the returned list represents the last node in the path and so on. *)
 Fixpoint traceParent
   (parent:list found) (v:node)
   {struct parent}
@@ -618,6 +668,7 @@ Fixpoint traceParent
            end
   end.
 
+(** Setting the parent of a new node does not modify the parent of any other node *)
 Lemma parents_dont_disappear: forall parent parent' pu u d p,
   (u,pu)::parent = parent' -> u <> d -> traceParent parent d = Some p ->
   traceParent parent' d = Some p.
@@ -637,14 +688,6 @@ Proof.
   subst. crush. crush. crush.
 Qed.
 
-Lemma in_partitioning : forall {A} xs (x:A), In x xs ->
-  exists xs1 xs2, xs = xs1++x::xs2.
-Proof.
-  induction xs; intros. inversion H.
-  inversion H. exists []. exists xs. crush.
-  elim (IHxs _ H0); intros. elim H1; intros. exists (a::x0). exists x1. crush.
-Qed.
-
 Lemma contains_sth_is_not_empty : forall {A} xs (x:A) ys, xs++(x::ys) <> [].
 Proof. induction xs; crush. Qed.
 
@@ -656,6 +699,14 @@ Proof.
   - inversion H. remember (contains_sth_is_not_empty xs x xs') as H3. crush.
 Qed.
 
+(** * Proof of correctness of [bfs] *)
+
+(** [HextendFrontier] and is used to prove that all when BFS expands a node and
+inserts its neighbors to the frontier, then the frontier is still a valid
+boundary between expanded and unexpanded nodes: every path from the start node
+to an unexpanded node must go through the frontier. [ws] is the part of the
+path that previously connected the frontier to the destination node [d], and
+[u] is the node being expanded.*)
 Lemma HextendFrontier' :
   forall (v:node) u ws,
   Some u <> hd_error (ws++[v]) -> (* u is not destination *)
@@ -740,11 +791,7 @@ Proof.
     apply H2. rewrite H3; auto.
 Qed.
 
-Inductive reachableUsing : graph -> node -> node -> list node -> Prop :=
-| IdPath : forall g s, reachableUsing g s s [s]
-| ConsPath : forall g s u p,             reachableUsing g s u    p   ->
-             forall v, hasEdge g u v ->  reachableUsing g s v  (v::p).
-
+(** Yet another property of [remove]... *)
 Lemma removing_corr_item : forall x xs xs',
   remove node_eq_dec x xs = xs' ->
   forall x', ~(In x' xs') -> In x' xs -> x = x'.
@@ -762,6 +809,7 @@ Proof.
     right. auto. auto.
 Qed.
 
+(* Using [lookupDefault] indeed returns the neighbors of a node *)
 Lemma lookup_neighbors: 
   forall g u neighbors, lookupDefault g [] u = neighbors ->
   forall v, In v neighbors -> hasEdge g u v.
@@ -770,6 +818,7 @@ Proof.
   rewrite H; auto.
 Qed.
 
+(** If an invariant holds, then all nodes that for which there is an entry in the parent map are expanded *)
 Lemma parent_means_expanded : forall parent u p unexpanded,
   traceParent parent u = Some p ->
   (forall (n : node) (np : option node * nat),
@@ -785,6 +834,7 @@ Proof.
   intros. apply (H0 n1 np). right. auto.
 Qed.
 
+(** Everything to which one can find a path from the parent map must be in there *)
 Lemma traceparent_in : forall parent u p,
   traceParent parent u = Some p -> exists pu, In (u, pu) parent.
 Proof.
@@ -797,12 +847,8 @@ Proof.
   inversion H.
 Qed.
 
-Notation shortestPath g s d p := (
-  reachableUsing g s d p
-  /\
-  (forall p', reachableUsing g s d p' -> length p' >= length p)).
-
-Lemma reachableUsing_head: forall g s d p, reachableUsing g s d p ->
+(** List manipulation. *)
+Lemma hasPath_head: forall g s d p, hasPath g s d p ->
   p <> [] -> exists t, p = d::t.
 Proof.
   induction p; intros; simpl in *.
@@ -830,7 +876,7 @@ Proof.
 Qed.
 
 Lemma dest_different_end_nonempty : forall p_out' g s d p',
-  reachableUsing g s d p' ->
+  hasPath g s d p' ->
   forall u, u <> d ->
   forall p_out v p_in, p' = p_out ++ v :: p_in ->
   forall p_skip, p_out ++ [v] = p_out' ++ u :: p_skip ->
@@ -840,7 +886,7 @@ Proof.
   assert (p_out <> []). unfold not; intros. rewrite H3 in *; clear H3.
     simpl in *.
     assert (p' <> []). rewrite H1. unfold not; intros. inversion H3.
-    elim (reachableUsing_head _ _ _ _ H H3); intros.
+    elim (hasPath_head _ _ _ _ H H3); intros.
     destruct p_out'. inversion H2. subst. inversion H1. crush.
     inversion H2. remember (contains_sth_is_not_empty p_out' u p_skip) as H8.
     crush.
@@ -850,14 +896,15 @@ Proof.
     inversion H2.
     assert (n :: p_out ++ v :: p_in <> []).
       unfold not; intros. inversion H1.
-    elim (reachableUsing_head _ _ _ _ H H1); intros.
+    elim (hasPath_head _ _ _ _ H H1); intros.
     inversion H6. subst. apply H0; auto.
   apply nonempty_has_last. auto.
 Qed.
 
+(** If [a] and [b] are adjacent in a path, there must be an edge between them. *)
 Lemma in_path_edge :
   forall p' p a b p'' p''', p = ((p' ++ [a]) ++ b :: p'') ++ p''' ->
-  forall g s d, reachableUsing g s d p ->
+  forall g s d, hasPath g s d p ->
   hasEdge g b a.
 Proof.
   induction p'; intros; simpl in *.
@@ -873,6 +920,7 @@ Proof.
     + eapply IHp'. Focus 2. apply H8. crush.
 Qed.
 
+(** More list and map manipulation *)
 Lemma edge_in_neigh : forall g a neigh,
   lookupDefault g [] a = neigh -> forall b, hasEdge g a b -> In b neigh.
 Proof.
@@ -930,6 +978,7 @@ Proof.
   left; apply in_neigh_in_map; auto.
 Qed.
 
+(** Finally, the frontier indeed separates the expanded nodes from the unexpanded nodes (if it did on the previous step) *)
 Lemma HextendFrontier_not_u :
   forall v' u g neighbors pu frontierRemaining frontier'
   unexpanded unexpanded' d p' s p_out v p_in p_out' p_skip,
@@ -939,7 +988,7 @@ Lemma HextendFrontier_not_u :
   (forall w : node, In w p_out -> In w unexpanded) ->
   p' = p_out ++ v :: p_in ->
   u <> d -> 
-  reachableUsing g s d p' ->
+  hasPath g s d p' ->
   remove node_eq_dec u unexpanded = unexpanded' ->
   fold_right (insert foundPathLen) frontierRemaining
     (map
@@ -980,6 +1029,7 @@ Proof.
   remember (Hws' _ H0 Hkeys) as Hcontra. auto.
 Qed.
 
+(** ...and even more list manipulation... *)
 Lemma list_last_next_first : forall {A} a (x:A) b, (a ++ [x]) ++ b = a ++ x::b.
 Proof.
   induction a; intros; simpl in *; auto.
@@ -995,13 +1045,14 @@ Proof.
 Qed.
 
 Lemma d_head_path : forall g s d p,
-  reachableUsing g s d p -> hd_error p = Some d.
+  hasPath g s d p -> hd_error p = Some d.
 Proof.
   intros. inversion H; crush.
 Qed.
 
+(** If a path leads from [s] to [y] and then to [x], the relevant part of it leads from [s] to [y].*)
 Lemma reachable_halfway : forall g s xs x y ys,
-  reachableUsing g s x (xs ++ y :: ys) -> reachableUsing g s y (y :: ys).
+  hasPath g s x (xs ++ y :: ys) -> hasPath g s y (y :: ys).
 Proof.
   induction xs; intros; simpl in *.
   - inversion H; crush.
@@ -1011,11 +1062,13 @@ Proof.
     + apply (IHxs _ _ _ H5).
 Qed.
 
+(** The following lemma describes the evolution of BFS state at an arbitrary time during its execution. *)
 Lemma bfs_corr:
   forall (g:graph) (s:node),
   forall (unexpanded:list node) (frontier:list found) (parent:list found),
   ((
-    forall (d:node) (p':list node), reachableUsing g s d p' ->
+  (** [H]: The most important invariant: to get from the start node to an unexpanded node, a path *must* go through the frontier. To get to an expended node, just look it up the path to it from the parent map. *)
+    forall (d:node) (p':list node), hasPath g s d p' ->
       if node_in_dec d unexpanded
       then exists p_in v p_out, p' = p_out ++ v::p_in
            /\ In v unexpanded
@@ -1023,29 +1076,38 @@ Lemma bfs_corr:
            /\ exists l, In (v, (hd_error p_in, l)) frontier
       else exists p, traceParent parent d = Some p
   ) /\ (
+  (** [HfrontierParents]: Almost every node in the frontier has its parent already registered in the parent array. The exception is the start node, which does not have a parent. *)
     forall v parentPointer l, In (v, (parentPointer, l)) frontier ->
       match parentPointer with
       | None => v = s /\ l = 1
       | Some u => exists p,
-          traceParent parent u = Some p /\ reachableUsing g s v (v::p) /\ length (v::p) = l
+          traceParent parent u = Some p /\ hasPath g s v (v::p) /\ length (v::p) = l
                                         (*todo: replace with hasEdge ? *)
       end
   ) /\ (
+  (** [HfrontierSorted]: [extractMin]'s precondition holds. *)
     sorted foundPathLen frontier
   ) /\ (
+  (** [HparentExpanded]: Everything that has a parent set is already expanded. *)
     forall n np, In (n, np) parent -> ~In n unexpanded
   ) /\ (
+  (** [HparentPaths]: Each parent map entry either points to the start node or points to some node that points to the start node. *)
     forall n np, In (n, np) parent -> exists p, traceParent parent n = Some p
   ) /\ (
+  (** [HparentPaths]: Every parent map entry represents a valid, shortest path to the specified node. *)
     forall n  p, traceParent parent n = Some p -> shortestPath g s n p
   ))
+  (** The claim: when evaluated on an input that satisfies the said conditions  *)
     -> forall ret, bfs g unexpanded frontier parent = ret ->
   ((
-    forall (d:node) (p':list node), reachableUsing g s d p' -> exists p, traceParent ret d = Some p
+  (** our [bfs] will find a path to each node to which there is a path  *)
+    forall (d:node) (p':list node), hasPath g s d p' -> exists p, traceParent ret d = Some p
   ) /\ (
+  (** and all paths our [bfs] finds will be valid shortest paths. *)
     forall (d:node) (p:list node), traceParent ret d = Some p -> shortestPath g s d p
   ))
 .
+  (* We prove the inductive case first and use the same names for the hypotheses as above. *)
   intros until parent.
   functional induction (bfs g unexpanded frontier parent). Focus 2.
   intros until ret; eapply IHl; clear IHl;
@@ -1055,6 +1117,7 @@ Lemma bfs_corr:
   rename H2 into HparentExpanded;
   rename H3 into HparentSome;
   rename H4 into HparentPaths;
+  (** The ways in which one iteration modifies the loop variables *)
   expandBFS;
   rename H0 into HparentPrepend;
   rename H1 into HfrontierInsert;
@@ -1066,7 +1129,7 @@ Lemma bfs_corr:
   destruct Hc as [Hfrontier_split [HdiscardedExpanded [HextractMin HminUnexpanded]]];
   destruct p; destruct f; myinj' Heqc; destruct p).
 
-  {
+  { (** preservation of [H]: all paths to unexpanded nodes go through the frontier because every time [bfs] removes a node from the frontier it adds all nodes thtorugh which the path may have continued from it. *)
     remember H as Hd; clear HeqHd.
     intros d p' Hp'; specialize (Hd _ _ Hp').
     destruct (node_in_dec d unexpanded).
@@ -1167,7 +1230,7 @@ Lemma bfs_corr:
     }
   }
 
-  {
+  { (** Every parent of a node in [frontier] has an entry in [parent] because when [bfs] add a node's neighbors to [frontier] it also adds the node itself to [parent]. *)
     intros v vp vl.
     revert Hfrontier_split; intro; revert HfrontierInsert; intro.
     generalize (HfrontierParents v vp vl); intro Hfrontier.
@@ -1226,7 +1289,7 @@ Lemma bfs_corr:
     }
   }
 
-  {
+  { (** Frontier is sorted due to the properties of [insert] and [extractMin] *)
     (* sorted frontier'*)
     rewrite <- HfrontierInsert.
     eapply insert_many_sorted; eauto.
@@ -1235,20 +1298,18 @@ Lemma bfs_corr:
     eauto using sorted_tail.
   }
 
-  { (* every node in parent is expanded *)
+  { (** Every node in parent is expanded because [bfs] marks a node expanded right when it adds that node to parent *)
     intros v vp Hv.
-    (* todo: refactor this out *)
     assert ((v,vp)=(u,pu) \/ In (v,vp) parent) as Heither.
       assert (In (v, vp) ([(u, pu)] ++ parent)) as Hl by crush.
       specialize (in_app_or [(u,pu)] parent (v,vp) Hl); intro Hor.
       destruct Hor as [[Ha|Hf]|Hb]; [left|inversion Hf|]; auto.
-    (* *)
     destruct Heither as [Heq|Hin]; [myinj' Heq; subst; apply remove_In|].
     generalize (HparentExpanded v vp Hin) as HwasExpanded; intro.
     eapply remove_does_not_add; eauto.
   }
 
-  {
+  { (** [bfs] only adds paths to parent by extending a path that is already in parent, so all paths in parent start from the start node *)
     rewrite <- HparentPrepend.
     revert HparentPaths; intro.
     intros v vp Hvp.
@@ -1287,7 +1348,7 @@ Lemma bfs_corr:
     }
   }
   
-  {
+  { (** The paths added to [parent] are shortest paths to their destination because any alternative path would have to go through the frontier, the path to anything on the frontier is at least as long as the path to the parent of the node we are adding, and the path to the parent of the node in the frontier is known to be optimal because it is already in [parent]. *)
     intros v p Hvp.
     rewrite <- HparentPrepend in Hvp.
     revert HparentPaths; intro.
@@ -1346,8 +1407,8 @@ Lemma bfs_corr:
         eapply Hv_parent_shortest.
         destruct p_in as [|v_parent_]; [inversion Heqhd_p_in|].
         symmetry in Heqhd_p_in; myinj' Heqhd_p_in.
-        assert (forall x xs y ys, reachableUsing g s x (xs ++ y :: ys)
-                               -> reachableUsing g s y (      y :: ys))
+        assert (forall x xs y ys, hasPath g s x (xs ++ y :: ys)
+                               -> hasPath g s y (      y :: ys))
           as HsubPath by
           (intros; apply (reachable_halfway g s xs x y ys); auto).
         replace ( p_out ++  v  :: v_parent :: p_in)
@@ -1365,7 +1426,9 @@ Lemma bfs_corr:
     symmetry in HeqtracePv.
     eapply HparentPaths; trivial.
   }
-  Unfocus. (* base case: our invariants imply the conclusion *)
+
+  (** Base case: our invariants imply the conclusion *)
+  Unfocus.
   
   intros; splitHs;
   rewrite <- H0 in *; clear ret H0;
@@ -1376,7 +1439,7 @@ Lemma bfs_corr:
   rename H5 into HparentPaths;
   split.
 
-  {
+  { (** [parent] has a path to each reachable node, because all paths to reachable nodes which are not in [parent] must go through the frontier, and [frontier] only contains nodes that are already expanded. *)
     intros d p' Hp'.
     revert H; intro.
     specialize (H d p' Hp').
@@ -1399,12 +1462,16 @@ Lemma bfs_corr:
   }
 
   {
+    (** All paths in [parent] are shortest, and we return [parent], so all paths in [ret] are shortest *)
     intros d p' Hp'.
     exact (HparentPaths d p' Hp').
   }
 
 Qed.
 
+(** * A wrapper that initializes the internal variables and calls [bfs] *)
+
+(** All nodes in a graph, to be marked unexpanded before [bfs] starts *)
 Fixpoint nodes (g:graph) : list node :=
   match g with
   | nil => nil
@@ -1423,44 +1490,46 @@ Proof.
     (simpl; intros; destruct H1; [crush|right]; apply in_or_app; right; eauto).
 Qed.
 
-Lemma reachableUsing_in_nodes:
-  forall g u v p, reachableUsing g u v p -> In u (nodes g) -> In v (nodes g).
+Lemma hasPath_in_nodes:
+  forall g u v p, hasPath g u v p -> In u (nodes g) -> In v (nodes g).
 Proof.
   induction 1; crush. specialize (hasEdge_in_nodes g u v); crush.
 Qed.
 
-Lemma reachableUsing_in_nodes':
-  forall g u v p, reachableUsing g u v p -> u <> v -> In v (nodes g).
+Lemma hasPath_in_nodes':
+  forall g u v p, hasPath g u v p -> u <> v -> In v (nodes g).
 Proof.
   induction 1; crush. specialize (hasEdge_in_nodes g u v); crush.
 Qed.
 
-Lemma reachableUsing_path_in_nodes:
-  forall g u v p, reachableUsing g u v p ->
+Lemma hasPath_path_in_nodes:
+  forall g u v p, hasPath g u v p ->
   forall w, In w (removelast p) -> In w (nodes g).
 Proof.
   induction 1; [crush|].
   intros.
   destruct p; [crush|].
   replace (removelast (v :: n :: p)) with (v::removelast (n :: p)) in * by crush.
-  destruct H1; [|eauto]; clear IHreachableUsing.
+  destruct H1; [|eauto]; clear IHhasPath.
   subst. eapply hasEdge_in_nodes; eauto.
 Qed.
 
+(** the wrapper *)
 Definition bfs' g s := bfs g (s::nodes g) [(s,(None,1))] [].
 
-Lemma reachableUsing_tail: forall g s d p, reachableUsing g s d p -> p = removelast p ++ [s].
+Lemma hasPath_tail: forall g s d p, hasPath g s d p -> p = removelast p ++ [s].
   (* XXX: crush hangs here *)
   induction 1; [reflexivity|].
   simpl in *; destruct p; [unfold not; intros; subst; simpl in *; congruence|].
   rewrite <- app_comm_cons.
-  apply f_equal; apply IHreachableUsing.
+  apply f_equal; apply IHhasPath.
 Qed.
 
+(* Calling [bfs] from the outside satisfies its invariants with the initial conditions, therefore the output will satisfy the postcondition. *)
 Lemma bfs_corr':
   forall (g:graph) (s:node) ret, bfs' g s = ret ->
   ((
-    forall (d:node) (p':list node), reachableUsing g s d p' -> exists p, traceParent ret d = Some p
+    forall (d:node) (p':list node), hasPath g s d p' -> exists p, traceParent ret d = Some p
   ) /\ (
     forall (d:node) (p:list node), traceParent ret d = Some p -> shortestPath g s d p
   )).
@@ -1469,14 +1538,14 @@ Lemma bfs_corr':
   eapply bfs_corr; [|apply H]; clear H; repeat split; intros; try solve [pv].
   { destruct (node_in_dec d (s::nodes g)).
     - exists []. exists s. exists (removelast p'). repeat split.
-      + eapply reachableUsing_tail; eauto.
+      + eapply hasPath_tail; eauto.
       + left; reflexivity.
-      + intros. right. eapply reachableUsing_path_in_nodes; eauto.
+      + intros. right. eapply hasPath_path_in_nodes; eauto.
       + exists 1. left; reflexivity.
     - assert False; [|pv]; apply n.
       destruct (node_eq_dec s d).
       + left; trivial.
-      +  right. eapply reachableUsing_in_nodes'; eauto.
+      +  right. eapply hasPath_in_nodes'; eauto.
   }
   {
     destruct H; [|pv].
@@ -1486,16 +1555,12 @@ Lemma bfs_corr':
   }
 Qed.
 
-
+(** Example sanity-check *)
 Section ex1. (* BFS example from CLRS 3rd edition *)
-  Notation r := (Node 0).
-  Notation s := (Node 1).
-  Notation t := (Node 2).
-  Notation u := (Node 3).
-  Notation v := (Node 4).
-  Notation w := (Node 5).
-  Notation x := (Node 6).
-  Notation y := (Node 7).
+  Notation r := (Node 0). Notation v := (Node 4).
+  Notation s := (Node 1). Notation w := (Node 5).
+  Notation t := (Node 2). Notation x := (Node 6).
+  Notation u := (Node 3). Notation y := (Node 7).
   Definition g :=
   [ (v, [r])
   ; (r, [v; s])
