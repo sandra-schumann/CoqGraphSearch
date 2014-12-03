@@ -1058,7 +1058,7 @@ Lemma dijkstra_corr':
   ) /\ (
     forall n np, In (n, np) parent -> exists p, traceParent parent n = Some p
   ) /\ (
-    forall u v, ~In u unexpanded -> hasEdge g u v -> exists l, In (v, (Some u, l)) frontier
+    forall u v, hasEdge g u v -> ~In u unexpanded -> In v unexpanded -> exists l, In (v, (Some u, l)) frontier
   ) /\ (
     forall n  p, traceParent parent n = Some p -> shortestPath f g s n p
   ))
@@ -1318,6 +1318,9 @@ Lemma dijkstra_corr':
   }
 
   {
+    (* TODO: all edges from expanded to unexpanded are in frontier *)
+    (* if the start node is already expanded, prove that the destination nodes of all edges taken out of the frontier go into expanded *)
+    (* if the start node is being added to expanded, show that all its outgoing edges are added to the frontier *)
     admit.
   }
 
@@ -1357,7 +1360,7 @@ Lemma dijkstra_corr':
           (destruct (traceparent_in _ _ _ Hv_parent_Some); eauto using HparentExpanded).
         assert (hasEdge g v_parent v) as Hedge_v_parent_v
           by admit.
-        destruct (HneighborFrontier _ _ Hv_parentUnexpanded Hedge_v_parent_v) as [lv' HvFrontier'].
+        destruct (HneighborFrontier _ _ Hedge_v_parent_v Hv_parentUnexpanded HvUnexpanded) as [lv' HvFrontier'].
         destruct (HfrontierParents _ _ _ HvFrontier') as [v_parent_path' [Hv_parent_Some' [Hv_parent_reachable' Hvpp_length']]].
         replace v_parent_path' with v_parent_path in * by crush.
         assert (lv >= lu) as Hge. {
