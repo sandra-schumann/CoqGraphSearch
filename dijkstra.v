@@ -1058,8 +1058,7 @@ Lemma dijkstra_corr':
   ) /\ (
     forall n np, In (n, np) parent -> exists p, traceParent parent n = Some p
   ) /\ ((
-    forall n np, In (n, np) parent -> forall w, In w (lookupDefault g [] n)
-      -> In w unexpanded -> exists len, In (w, (Some n, len)) frontier
+    forall u v, ~In u unexpanded -> hasEdge g u v -> exists l, In (v, (Some u, l)) frontier
   ) /\ (
     forall n  p, traceParent parent n = Some p -> shortestPath f g s n p
   )))
@@ -1319,15 +1318,10 @@ Lemma dijkstra_corr':
   }
 
   {
-    assert ((forall (n1 : node) (np : option node * nat),
-      In (n1, np) parent' ->
-      forall w : node,
-      In w (lookupDefault g [] n1) ->
-      In w unexpanded' -> exists len : nat, In (w, (Some n1, len)) frontier'))
-    as HneighborFrontier'; [|split;[assumption|]].
-    
-    { admit. }
-
+    assert (forall u v, ~In u unexpanded -> hasEdge g u v ->
+      exists l0 : nat, In (v, (Some u, l0)) frontier') as HneighborFrontier'
+      by admit ; split.
+    admit.
     {
     intros v p Hvp.
     rewrite <- HparentPrepend in Hvp.
@@ -1356,42 +1350,43 @@ Lemma dijkstra_corr':
         destruct He as [Hsplit_p [HvUnexpanded [Hp_out HvFrontier]]].
         rewrite Hsplit_p in *; clear Hsplit_p.
         elim HvFrontier; clear HvFrontier; intros lv HvFrontier.
-        generalize HvFrontier; intro HIn.
-        generalize (HfrontierParents _ _ _ HvFrontier); intro Hv_parent.
-        (* todo: separate this out? HdiscardExpanded + Hfrontier_split *)
-        rewrite Hfrontier_split in HIn; rename HIn into HIn'.
-        destruct (in_app_or _ _ (v, _) HIn') as [HIn|HIn]; clear HIn'. {
-          specialize (HdiscardedExpanded (v, _) HIn); crush.
-        } 
-        (* *)
+        destruct p_in; [admit|].
+        rename n1 into v_parent.
+        simpl in HvFrontier; unfold value in HvFrontier; simpl in HvFrontier; simpl.
+        destruct (HfrontierParents _ _ _ HvFrontier) as [v_parent_path [Hv_parent_Some [Hv_parent_reachable Hvpp_length]]].
+        assert (~ In v_parent unexpanded) as Hv_parentUnexpanded by
+          (destruct (traceparent_in _ _ _ Hv_parent_Some); eauto using HparentExpanded).
+        assert (hasEdge g v_parent v) as Hedge_v_parent_v
+          by admit.
+        destruct (HneighborFrontier _ _ Hv_parentUnexpanded Hedge_v_parent_v) as [lv' HvFrontier'].
+        destruct (HfrontierParents _ _ _ HvFrontier') as [v_parent_path' [Hv_parent_Some' [Hv_parent_reachable' Hvpp_length']]].
+        replace v_parent_path' with v_parent_path in * by crush.
         assert (lv >= lu) as Hge. {
+          remember HvFrontier as HIn; clear HeqHIn.
+          rewrite Hfrontier_split in HIn; rename HIn into HIn'.
+          destruct (in_app_or _ _ (v, _) HIn') as [HIn|HIn]; clear HIn'. {
+            specialize (HdiscardedExpanded (v, _) HIn); crush.
+          } 
           simpl in HIn. destruct HIn as [HIn | HIn].
             inversion HIn. omega.
-            assert (foundPathLen (v,(hd_error p_in, lv)) >= foundPathLen (u, (Some u_parent, lu)))
+            assert (foundPathLen (v, (Some v_parent, lv)) >=
+                    foundPathLen (u, (Some u_parent, lu)))
               as Hge' by (apply HextractMin; simpl in *; auto).
             unfold foundPathLen in Hge'. simpl in Hge'. auto.
         }
         simpl; rewrite Hupp_length; clear Hupp_length.
-        assert (pathLength f (p_out++v::p_in) >= lv); [|omega]; clear Hge.
-        remember (hd_error p_in) as hd_p_in.
-        destruct hd_p_in as [v_parent|]; [|induction p_out; crush].
-        elim Hv_parent; clear Hv_parent; intros v_parent_path Hv_parent_path.
-        destruct Hv_parent_path as [Hv_parent_Some [Hv_parent_reachable Hvpp_length]].
-        destruct (HparentPaths _ _ Hv_parent_Some) as [_ Hv_parent_shortest].
-        subst lv.
-        assert (pathLength f p_in >= pathLength f v_parent_path). {
-          eapply Hv_parent_shortest.
-          destruct p_in as [|v_parent_]; [inversion Heqhd_p_in|].
-          symmetry in Heqhd_p_in; myinj' Heqhd_p_in.
-          assert (forall x xs y ys, hasPath g s x (xs ++ y :: ys)
-                                 -> hasPath g s y (      y :: ys))
-            as HsubPath by
-            (intros; apply (reachable_halfway g s xs x y ys); auto).
-          replace ( p_out ++  v  :: v_parent :: p_in)
-             with ((p_out ++ [v]) ++ v_parent :: p_in) in * by crush.
-          eauto.
-        }
-        admit. (* TODO *)
+        assert (pathLength f (p_out++v::v_parent::p_in) >= lv'); [|omega]; clear Hge.
+        assert (traceParent parent v_parent = Some v_parent_path -> exists p_in', v_parent_path=v_parent::p_in') as Hv_parent_again by admit.
+        destruct (Hv_parent_again Hv_parent_Some) as [p_in' Heqv_parent_path].
+        subst v_parent_path. rewrite <- Hvpp_length'.
+        destruct (HparentPaths _ _ Hv_parent_Some) as [_ Hp].
+        assert (hasPath g s v_parent (v_parent :: p_in)) as Hv_parentHasPath
+          by admit.
+        specialize (Hp (v_parent :: p_in) Hv_parentHasPath).
+        assert (pathLength f (              v_parent :: p_in) >= pathLength f (     v_parent :: p_in')
+             -> pathLength f (p_out ++ v :: v_parent :: p_in) >= pathLength f (v :: v_parent :: p_in'))
+          by admit.
+          auto.
       } {
         destruct HuReachable.
         injection Hvp; intro; subst; split.
