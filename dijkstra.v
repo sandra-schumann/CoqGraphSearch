@@ -1,3 +1,4 @@
+(* vim: set filetype=coq ts=2 sw=2 et : *)
 (************************************************************************)
 (* Written by Andres Erbsen and Sandra Schumann in 2014                 *)
 (* Public domain / CC0                                                  *)
@@ -16,7 +17,6 @@ u v => 1) g s) d]. The path obtained by this method is a list of nodes that
 contains both the start node and the end node, and the end node is first.*)
 
 (* begin hide *)
-(* vim: set filetype=coq ts=2 sw=2 et : *)
 Require Import Coq.Lists.List.
 Require Import Coq.Init.Datatypes.
 Require Import Coq.Init.Wf.
@@ -1057,11 +1057,11 @@ Lemma dijkstra_corr':
     forall n np, In (n, np) parent -> ~In n unexpanded
   ) /\ (
     forall n np, In (n, np) parent -> exists p, traceParent parent n = Some p
-  ) /\ ((
+  ) /\ (
     forall u v, ~In u unexpanded -> hasEdge g u v -> exists l, In (v, (Some u, l)) frontier
   ) /\ (
     forall n  p, traceParent parent n = Some p -> shortestPath f g s n p
-  )))
+  ))
     -> forall ret, dijkstra' f g unexpanded frontier parent = ret ->
   ((
     forall (d:node) (p':list node), hasPath g s d p' -> exists p, traceParent ret d = Some p
@@ -1072,7 +1072,7 @@ Lemma dijkstra_corr':
   intros until parent.
   functional induction (dijkstra' f g unexpanded frontier parent). Focus 2.
   intros until ret; eapply IHl; clear IHl;
-  splitHs; split; [|split;[|split;[|split;[|split]]]];
+  splitHs; split; [|split;[|split;[|split;[|split;[|split]]]]];
   rename H0 into HfrontierParents;
   rename H1 into HfrontierSorted;
   rename H2 into HparentExpanded;
@@ -1318,11 +1318,10 @@ Lemma dijkstra_corr':
   }
 
   {
-    assert (forall u v, ~In u unexpanded -> hasEdge g u v ->
-      exists l0 : nat, In (v, (Some u, l0)) frontier') as HneighborFrontier'
-      by admit ; split.
     admit.
-    {
+  }
+
+  {
     intros v p Hvp.
     rewrite <- HparentPrepend in Hvp.
     revert HparentPaths; intro.
@@ -1383,7 +1382,10 @@ Lemma dijkstra_corr':
         assert (hasPath g s v_parent (v_parent :: p_in)) as Hv_parentHasPath
           by admit.
         specialize (Hp (v_parent :: p_in) Hv_parentHasPath).
-        assert (pathLength f (              v_parent :: p_in) >= pathLength f (     v_parent :: p_in')
+        assert (pathLength f (     v_parent :: p_in) >= pathLength f (     v_parent :: p_in')
+             -> pathLength f (v :: v_parent :: p_in) >= pathLength f (v :: v_parent :: p_in'))
+          by admit.
+        assert (pathLength f (         v :: v_parent :: p_in) >= pathLength f (v :: v_parent :: p_in')
              -> pathLength f (p_out ++ v :: v_parent :: p_in) >= pathLength f (v :: v_parent :: p_in'))
           by admit.
           auto.
@@ -1435,7 +1437,7 @@ Lemma dijkstra_corr':
 
   {
     intros d p' Hp'.
-    exact (HparentPaths d p' Hp').
+    auto.
   }
 
 Qed.
@@ -1518,6 +1520,11 @@ Lemma dijkstra_corr:
     destruct parentPointer.
     - assert False; [|pv]. assert (Some n = None) by crush; crush.
     - crush.
+  }
+  {
+    assert False; [|pv].
+    destruct (hasEdge_in_nodes _ _ _ H0).
+    crush.
   }
 Qed.
 
