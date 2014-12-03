@@ -39,4 +39,4 @@ The work on the project was mostly done in tight collaboration. Most major ideas
 License
 -------
 
-The code created in this project is released to public domain.
+The code created in this project is released to public domain (see code file).
