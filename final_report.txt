@@ -58,7 +58,8 @@ Distribution of labor
 ---------------------
 
 The work on the project was mostly done in tight collaboration. Most major
-ideas were discussed through before coding them up. After the overall structure was laid out, Andres was dealing more with coding up the overall
+ideas were discussed through before coding them up. After the overall
+structure was laid out, Andres was dealing more with coding up the overall
 structure of the proof, while Sandra was doing a lot of knocking off lemmas
 used in the code and substituting `admit`s with actual proofs. However, both
 authors of the project dealt with all kinds of necessary details every now and
