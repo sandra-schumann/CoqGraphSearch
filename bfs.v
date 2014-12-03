@@ -6,15 +6,13 @@
 (** This library provides an implementation of a variant of Dijkstra's
 single source shortest paths algorithm on directed graphs. The input graph is
 represented as a mapping from nodes to the lists of their neighbors ([list
-(node*list node)]).  The length/cost/weight of moving from one node to another
-is specified by a function of type [node->node->nat], it is not present in the
-graph structure.  The output of the function [dijkstra] is a mapping from each
+(node*list node)]). The output of the function [bfs] is a mapping from each
 reachable node to its predcessor in the shortest path to it. The helper
 [traceParent] can efficiently compute the shortest path to any node from that
 mapping, or conclude that no path exists. Thus, the shortest path from node [s]
-to node [d] in graph [g] with edge lengths [1] is [traceParent (dijkstra (fun
-u v => 1) g s) d]. The path obtained by this method is a list of nodes that
-contains both the start node and the end node, and the end node is first.*)
+to node [d] in graph [g] with edge lengths [1] is [traceParent (bfs g s) d].
+The path obtained by this method is a list of nodes that contains both the
+start node and the end node, and the end node is first.*)
 
 (* begin hide *)
 Require Import Coq.Lists.List.
